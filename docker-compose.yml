@@ -1,0 +1,14 @@
+services:
+  admin-panel-campaign:
+    build:
+      context: .
+      args:
+        VITE_CAMPAIGN_API_URL: /api
+    container_name: admin-panel-campaign
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      CAMPAIGN_API_PROXY_TARGET: http://host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
