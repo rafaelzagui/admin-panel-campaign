@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import CreateAudienceModal from '@/components/campaigns/CreateAudienceModal.vue'
 import StatusIndicator from '@/components/ui/StatusIndicator.vue'
+import type { CreateCampaignAudiencePayload } from '@/dtos/campaign-api.dto'
+import { getApiErrorMessage } from '@/services/apiClient'
 import { useCampaignService } from '@/services/campaign.service'
 
-const { state } = useCampaignService()
+const emit = defineEmits<{
+  notify: [type: 'success' | 'error' | 'warning' | 'info', title: string, message: string]
+}>()
+
+const { state, createAudience } = useCampaignService()
+const showCreateModal = ref(false)
 
 const activeAudiences = computed(() =>
   state.audiences.filter((audience) => audience.status === 'ACTIVE').length,
@@ -11,6 +19,16 @@ const activeAudiences = computed(() =>
 
 function campaignName(campaignId: string) {
   return state.campaigns.find((campaign) => campaign.id === campaignId)?.name ?? 'Campanha removida'
+}
+
+async function submitAudience(campaignId: string, payload: CreateCampaignAudiencePayload) {
+  try {
+    await createAudience(campaignId, payload)
+    showCreateModal.value = false
+    emit('notify', 'success', 'Audiencia criada', 'A audiencia foi vinculada a campanha selecionada.')
+  } catch (error) {
+    emit('notify', 'error', 'Erro ao criar audiencia', getApiErrorMessage(error))
+  }
 }
 </script>
 
@@ -21,7 +39,10 @@ function campaignName(campaignId: string) {
         <span class="eyebrow">Audiencias</span>
         <h2>Segmentos vinculados a campanhas</h2>
       </div>
-      <span class="badge good">{{ activeAudiences }} ativas</span>
+      <div class="resource-actions">
+        <span class="badge good">{{ activeAudiences }} ativas</span>
+        <button class="primary-button" @click="showCreateModal = true">Nova audiencia</button>
+      </div>
     </article>
 
     <article class="panel">
@@ -42,5 +63,12 @@ function campaignName(campaignId: string) {
         </div>
       </div>
     </article>
+
+    <CreateAudienceModal
+      v-if="showCreateModal"
+      :campaigns="state.campaigns"
+      @close="showCreateModal = false"
+      @create="submitAudience"
+    />
   </section>
 </template>

@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import CreateRuleModal from '@/components/campaigns/CreateRuleModal.vue'
 import StatusIndicator from '@/components/ui/StatusIndicator.vue'
+import type { CreateCampaignRulePayload } from '@/dtos/campaign-api.dto'
+import { getApiErrorMessage } from '@/services/apiClient'
 import { useCampaignService } from '@/services/campaign.service'
 
-const { state } = useCampaignService()
+const emit = defineEmits<{
+  notify: [type: 'success' | 'error' | 'warning' | 'info', title: string, message: string]
+}>()
+
+const { state, createRule } = useCampaignService()
+const showCreateModal = ref(false)
 
 const rulesByPriority = computed(() =>
   [...state.rules].sort((a, b) => a.priority - b.priority),
@@ -11,6 +19,16 @@ const rulesByPriority = computed(() =>
 
 function campaignName(campaignId: string) {
   return state.campaigns.find((campaign) => campaign.id === campaignId)?.name ?? 'Campanha removida'
+}
+
+async function submitRule(campaignId: string, payload: CreateCampaignRulePayload) {
+  try {
+    await createRule(campaignId, payload)
+    showCreateModal.value = false
+    emit('notify', 'success', 'Regra criada', 'A regra foi associada a campanha selecionada.')
+  } catch (error) {
+    emit('notify', 'error', 'Erro ao criar regra', getApiErrorMessage(error))
+  }
 }
 </script>
 
@@ -21,7 +39,10 @@ function campaignName(campaignId: string) {
         <span class="eyebrow">Regras da campanha</span>
         <h2>Ordem de avaliacao e condicoes</h2>
       </div>
-      <span class="badge info">{{ state.rules.length }} regras</span>
+      <div class="resource-actions">
+        <span class="badge info">{{ state.rules.length }} regras</span>
+        <button class="primary-button" @click="showCreateModal = true">Nova regra</button>
+      </div>
     </article>
 
     <article class="panel">
@@ -46,5 +67,12 @@ function campaignName(campaignId: string) {
         </div>
       </div>
     </article>
+
+    <CreateRuleModal
+      v-if="showCreateModal"
+      :campaigns="state.campaigns"
+      @close="showCreateModal = false"
+      @create="submitRule"
+    />
   </section>
 </template>

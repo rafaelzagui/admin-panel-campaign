@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import LoginPage from '@/pages/LoginPage.vue'
 import { clearAuthToken, hasValidAuthToken } from '@/services/apiClient'
+import { clearAuthenticatedUsername } from '@/services/auth.service'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +18,7 @@ function authenticate() {
 
 function logout() {
   clearAuthToken()
+  clearAuthenticatedUsername()
   isAuthenticated.value = false
   router.replace('/login')
 }

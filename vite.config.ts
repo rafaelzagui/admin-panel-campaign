@@ -9,6 +9,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const campaignApiTarget = env.CAMPAIGN_API_PROXY_TARGET || 'http://localhost:3000'
+  const dispatchApiTarget = env.DISPATCH_API_PROXY_TARGET || 'http://localhost:3002'
 
   return {
     plugins: [
@@ -27,6 +28,11 @@ export default defineConfig(({ mode }) => {
           target: campaignApiTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
+        },
+        '/dispatch-api': {
+          target: dispatchApiTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/dispatch-api/, '/api'),
         },
       },
     },

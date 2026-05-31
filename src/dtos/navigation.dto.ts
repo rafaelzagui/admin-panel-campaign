@@ -1,1 +1,1 @@
-export type AdminView = 'campaigns' | 'rules' | 'audiences' | 'templates' | 'executions'
+export type AdminView = 'campaigns' | 'rules' | 'audiences' | 'templates' | 'executions' | 'dispatch'

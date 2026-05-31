@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import CreateTemplateModal from '@/components/campaigns/CreateTemplateModal.vue'
 import StatusIndicator from '@/components/ui/StatusIndicator.vue'
+import type { CreateMessageTemplatePayload } from '@/dtos/campaign-api.dto'
+import { getApiErrorMessage } from '@/services/apiClient'
 import { useCampaignService } from '@/services/campaign.service'
 
-const { state } = useCampaignService()
+const emit = defineEmits<{
+  notify: [type: 'success' | 'error' | 'warning' | 'info', title: string, message: string]
+}>()
+
+const { state, createTemplate } = useCampaignService()
+const showCreateModal = ref(false)
 
 const activeTemplates = computed(() =>
   state.templates.filter((template) => template.status === 'ACTIVE').length,
@@ -11,6 +19,16 @@ const activeTemplates = computed(() =>
 
 function campaignName(campaignId: string) {
   return state.campaigns.find((campaign) => campaign.id === campaignId)?.name ?? 'Campanha removida'
+}
+
+async function submitTemplate(campaignId: string, payload: CreateMessageTemplatePayload) {
+  try {
+    await createTemplate(campaignId, payload)
+    showCreateModal.value = false
+    emit('notify', 'success', 'Template criado', 'O template foi vinculado a campanha selecionada.')
+  } catch (error) {
+    emit('notify', 'error', 'Erro ao criar template', getApiErrorMessage(error))
+  }
 }
 </script>
 
@@ -21,7 +39,10 @@ function campaignName(campaignId: string) {
         <span class="eyebrow">Templates</span>
         <h2>Conteudo aprovado por campanha</h2>
       </div>
-      <span class="badge good">{{ activeTemplates }} ativos</span>
+      <div class="resource-actions">
+        <span class="badge good">{{ activeTemplates }} ativos</span>
+        <button class="primary-button" @click="showCreateModal = true">Novo template</button>
+      </div>
     </article>
 
     <article class="panel">
@@ -42,5 +63,12 @@ function campaignName(campaignId: string) {
         </div>
       </div>
     </article>
+
+    <CreateTemplateModal
+      v-if="showCreateModal"
+      :campaigns="state.campaigns"
+      @close="showCreateModal = false"
+      @create="submitTemplate"
+    />
   </section>
 </template>

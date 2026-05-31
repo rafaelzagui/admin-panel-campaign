@@ -137,3 +137,42 @@ export type UpdateCampaignPayload = Partial<{
   normalizationConfig: JsonRecord | null
   metadata: JsonRecord | null
 }>
+
+export type CreateCampaignPayload = {
+  name: string
+  slug: string
+  description?: string | null
+  scheduleType?: CampaignScheduleType
+  timezone?: string | null
+  startsAt?: string | null
+  endsAt?: string | null
+  triggerConfig?: JsonRecord | null
+  normalizationConfig?: JsonRecord | null
+  metadata?: JsonRecord | null
+}
+
+export type CreateCampaignRulePayload = {
+  name: string
+  description?: string | null
+  type: CampaignRule['type']
+  status?: CampaignRule['status']
+  priority?: number
+  condition: JsonRecord
+}
+
+export type CreateCampaignAudiencePayload = {
+  type: CampaignAudience['type']
+  identifier: string
+  displayName?: string | null
+  status?: CampaignAudience['status']
+  payload?: JsonRecord | null
+}
+
+export type CreateMessageTemplatePayload = {
+  name: string
+  channel?: MessageTemplate['channel']
+  content: string
+  fallbackContent?: string | null
+  variables?: JsonRecord | null
+  status?: MessageTemplate['status']
+}

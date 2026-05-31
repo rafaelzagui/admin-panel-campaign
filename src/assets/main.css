@@ -1604,6 +1604,12 @@ textarea:focus {
   font-size: 17px;
 }
 
+.resource-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .management-table {
   display: grid;
   overflow-x: auto;
@@ -1635,6 +1641,161 @@ textarea:focus {
 
 .management-row.executions-col {
   grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.9fr) minmax(150px, 0.55fr) minmax(320px, 1.4fr);
+}
+
+.dispatch-page {
+  display: grid;
+  gap: 10px;
+}
+
+.dispatch-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(260px, 310px);
+  gap: 10px;
+  align-items: start;
+}
+
+.dispatch-strip {
+  grid-template-columns: 1fr 0.72fr 0.5fr 0.88fr;
+}
+
+.dispatch-auth-panel,
+.dispatch-menu-panel,
+.dispatch-selected-panel {
+  position: sticky;
+  top: 14px;
+}
+
+.dispatch-menu-panel .table-row {
+  justify-content: flex-start;
+}
+
+.dispatch-metric-text {
+  overflow: hidden;
+  font-size: 13px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dispatch-instance-row {
+  grid-template-columns: minmax(190px, 1fr) minmax(128px, 0.44fr) minmax(150px, 0.72fr) minmax(190px, 1fr) minmax(310px, 1.15fr);
+  min-width: 1050px;
+}
+
+.dispatch-groups-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.1fr) minmax(120px, 0.45fr) minmax(240px, 0.9fr);
+  min-width: 850px;
+}
+
+.dispatch-rules-row {
+  grid-template-columns: minmax(90px, 0.35fr) minmax(90px, 0.35fr) minmax(110px, 0.4fr) minmax(260px, 1fr) minmax(150px, 0.55fr);
+  min-width: 760px;
+}
+
+.dispatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dispatch-actions .secondary-button,
+.dispatch-actions .primary-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.danger-action {
+  color: #ff7b72;
+  border-color: rgba(218, 54, 51, 0.42);
+}
+
+.danger-action:hover {
+  color: #ffffff;
+  background: rgba(218, 54, 51, 0.18);
+  border-color: var(--danger);
+}
+
+.dispatch-empty {
+  min-height: 44px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.dispatch-form {
+  display: grid;
+  gap: 10px;
+}
+
+.dispatch-checks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+.dispatch-checks label {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  background: var(--surface-alt);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 560;
+  text-transform: none;
+}
+
+.dispatch-checks input {
+  width: 14px;
+  min-height: 14px;
+}
+
+.dispatch-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dispatch-qr {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  color: var(--muted);
+  background:
+    linear-gradient(rgba(230, 237, 243, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(230, 237, 243, 0.018) 1px, transparent 1px),
+    var(--surface-code);
+  background-size: 28px 28px;
+  border: 1px dashed var(--border);
+}
+
+.dispatch-qr img {
+  max-width: min(360px, 100%);
+  max-height: 340px;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 6px;
+}
+
+.status-text-good {
+  color: var(--success) !important;
+}
+
+.status-text-warn {
+  color: var(--warn) !important;
+}
+
+.status-text-bad {
+  color: var(--danger) !important;
+}
+
+.status-text-neutral {
+  color: var(--muted) !important;
 }
 
 .management-row strong {
@@ -1688,6 +1849,17 @@ textarea:focus {
   padding: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
+}
+
+.create-campaign-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .modal p {
@@ -1823,6 +1995,16 @@ textarea:focus {
   .operational-panel {
     position: static;
   }
+
+  .dispatch-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dispatch-auth-panel,
+  .dispatch-menu-panel,
+  .dispatch-selected-panel {
+    position: static;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1877,7 +2059,15 @@ textarea:focus {
   .metrics,
   .operation-strip,
   .form-grid,
-  .split-list {
+  .split-list,
+  .dispatch-strip,
+  .dispatch-checks {
     grid-template-columns: 1fr;
+  }
+
+  .dispatch-action-bar,
+  .dispatch-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

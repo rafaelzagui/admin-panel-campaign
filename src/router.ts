@@ -44,6 +44,11 @@ export const router = createRouter({
       component: CampaignDashboardPage,
     },
     {
+      path: '/dispatch',
+      name: 'dispatch',
+      component: CampaignDashboardPage,
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/campaigns',
     },

@@ -8,6 +8,8 @@ import {
   FileText,
   GitBranch,
   LayoutDashboard,
+  RadioTower,
+  Send,
   PanelLeftClose,
   PanelLeftOpen,
   Users,
@@ -42,10 +44,19 @@ const serviceGroups: Array<{
       { label: 'Executions', view: 'executions', icon: Activity },
     ],
   },
+  {
+    id: 'dispatch-service',
+    label: 'Dispatch Service',
+    icon: Send,
+    items: [
+      { label: 'WhatsMiau Admin', view: 'dispatch', icon: RadioTower },
+    ],
+  },
 ]
 
 const openGroups = reactive<Record<string, boolean>>({
   'campaign-service': true,
+  'dispatch-service': true,
 })
 
 function toggleGroup(groupId: string) {

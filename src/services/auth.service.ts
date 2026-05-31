@@ -1,5 +1,7 @@
 import { apiRequest, setAuthToken } from '@/services/apiClient'
 
+const authUsernameKey = 'campaign_ops_username'
+
 type LoginResponse = {
   access_token?: string
   accessToken?: string
@@ -23,5 +25,16 @@ export async function login(username: string, password: string, rememberSession 
   }
 
   setAuthToken(token, rememberSession)
+  const storage = rememberSession ? window.localStorage : window.sessionStorage
+  storage.setItem(authUsernameKey, username)
   return token
+}
+
+export function getAuthenticatedUsername() {
+  return window.localStorage.getItem(authUsernameKey) ?? window.sessionStorage.getItem(authUsernameKey)
+}
+
+export function clearAuthenticatedUsername() {
+  window.localStorage.removeItem(authUsernameKey)
+  window.sessionStorage.removeItem(authUsernameKey)
 }

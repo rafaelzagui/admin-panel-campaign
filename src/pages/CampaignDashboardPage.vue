@@ -8,14 +8,17 @@ import CampaignDetailsForm from '@/components/campaigns/CampaignDetailsForm.vue'
 import CampaignOperationalPanel from '@/components/campaigns/CampaignOperationalPanel.vue'
 import CampaignRulesPanel from '@/components/campaigns/CampaignRulesPanel.vue'
 import CampaignWorkspaceTabs from '@/components/campaigns/CampaignWorkspaceTabs.vue'
+import CreateCampaignModal from '@/components/campaigns/CreateCampaignModal.vue'
 import LinkedEntityPanel from '@/components/campaigns/LinkedEntityPanel.vue'
 import StatusIndicator from '@/components/ui/StatusIndicator.vue'
 import ToastContainer, { type ToastItem } from '@/components/ui/ToastContainer.vue'
 import { validateCampaignReadiness } from '@/domain/campaignReadiness'
+import type { CreateCampaignPayload } from '@/dtos/campaign-api.dto'
 import type { CampaignDto } from '@/dtos/campaign.dto'
 import type { CampaignWorkspaceTab } from '@/dtos/campaignTabs.dto'
 import type { AdminView } from '@/dtos/navigation.dto'
 import AudiencesPage from '@/pages/AudiencesPage.vue'
+import DispatchServicePage from '@/pages/DispatchServicePage.vue'
 import ExecutionsPage from '@/pages/ExecutionsPage.vue'
 import RulesPage from '@/pages/RulesPage.vue'
 import TemplatesPage from '@/pages/TemplatesPage.vue'
@@ -32,6 +35,7 @@ const {
   state,
   loadCampaigns,
   loadCampaignDetail,
+  createCampaign: requestCreateCampaign,
   updateCampaign,
   activateCampaign: requestActivateCampaign,
   pauseCampaign: requestPauseCampaign,
@@ -43,11 +47,12 @@ const routeCampaignId = computed(() => {
 })
 const selectedId = ref(routeCampaignId.value || state.campaigns[0]?.id || '')
 const sidebarCollapsed = ref(false)
+const showCreateCampaign = ref(false)
 const toasts = ref<ToastItem[]>([])
 let toastId = 0
 
 const campaignTabs: CampaignWorkspaceTab[] = ['configuration', 'rules', 'audiences', 'templates', 'executions']
-const resourceViews: AdminView[] = ['rules', 'audiences', 'templates', 'executions']
+const resourceViews: AdminView[] = ['rules', 'audiences', 'templates', 'executions', 'dispatch']
 const activeView = computed<AdminView>(() => {
   return resourceViews.includes(route.name as AdminView) ? (route.name as AdminView) : 'campaigns'
 })
@@ -96,6 +101,7 @@ const pageTitle = computed(() => {
     audiences: 'Audiencias',
     templates: 'Templates',
     executions: 'Execucoes',
+    dispatch: 'Dispatch Service',
   }[activeView.value]
 })
 
@@ -134,6 +140,17 @@ async function openCampaign(campaignId: string) {
     await loadCampaignDetail(campaignId).catch((error) => {
       showApiError('Erro ao carregar campanha', error)
     })
+  }
+}
+
+async function createCampaign(payload: CreateCampaignPayload) {
+  try {
+    const created = await requestCreateCampaign(payload)
+    showCreateCampaign.value = false
+    showToast('success', 'Campanha criada', 'A campanha nasceu como DRAFT no campaign-service.')
+    await openCampaign(created.id)
+  } catch (error) {
+    showApiError('Erro ao criar campanha', error)
   }
 }
 
@@ -266,7 +283,7 @@ watch(activeCampaignTab, (tab) => {
           </button>
           <div>
             <span class="breadcrumb">
-              {{ campaignMode === 'detail' ? `Campaigns / ${selectedCampaign.slug}` : 'Campaigns' }}
+              {{ activeView === 'dispatch' ? 'Dispatch Service' : campaignMode === 'detail' ? `Campaigns / ${selectedCampaign.slug}` : 'Campaigns' }}
             </span>
             <h1>{{ pageTitle }}</h1>
             <StatusIndicator
@@ -288,6 +305,10 @@ watch(activeCampaignTab, (tab) => {
           <button class="secondary-button" @click="pauseCampaign">Pausar</button>
           <button class="secondary-button" @click="createExecution">Executar</button>
           <button class="primary-button" @click="activateCampaign">Ativar</button>
+          <button class="secondary-button" @click="$emit('logout')">Sair</button>
+        </div>
+        <div v-else-if="activeView === 'campaigns'" class="topbar-actions">
+          <button class="primary-button" @click="showCreateCampaign = true">Nova campanha</button>
           <button class="secondary-button" @click="$emit('logout')">Sair</button>
         </div>
         <div v-else class="topbar-actions">
@@ -385,12 +406,18 @@ watch(activeCampaignTab, (tab) => {
         </section>
       </template>
 
-      <RulesPage v-else-if="activeView === 'rules'" />
-      <AudiencesPage v-else-if="activeView === 'audiences'" />
-      <TemplatesPage v-else-if="activeView === 'templates'" />
+      <RulesPage v-else-if="activeView === 'rules'" @notify="showToast" />
+      <AudiencesPage v-else-if="activeView === 'audiences'" @notify="showToast" />
+      <TemplatesPage v-else-if="activeView === 'templates'" @notify="showToast" />
+      <DispatchServicePage v-else-if="activeView === 'dispatch'" />
       <ExecutionsPage v-else />
     </main>
 
+    <CreateCampaignModal
+      v-if="showCreateCampaign"
+      @close="showCreateCampaign = false"
+      @create="createCampaign"
+    />
     <ToastContainer :toasts="toasts" @dismiss="dismissToast" />
   </div>
 </template>

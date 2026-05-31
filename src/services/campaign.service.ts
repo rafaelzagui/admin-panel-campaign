@@ -4,6 +4,10 @@ import type {
   CampaignExecution,
   CampaignRule,
   CampaignSummary,
+  CreateCampaignAudiencePayload,
+  CreateCampaignPayload,
+  CreateCampaignRulePayload,
+  CreateMessageTemplatePayload,
   MessageTemplate,
   UpdateCampaignPayload,
 } from '@/dtos/campaign-api.dto'
@@ -16,6 +20,7 @@ import type {
 } from '@/dtos/campaign.dto'
 import { campaignSeed } from '@/mocks/campaign.mock'
 import { apiRequest } from '@/services/apiClient'
+import { getAuthenticatedUsername } from '@/services/auth.service'
 
 type CampaignState = CampaignSnapshotDto & {
   loading: boolean
@@ -228,6 +233,47 @@ async function updateCampaign(campaign: CampaignDto) {
   return mappedCampaign
 }
 
+async function createCampaign(payload: CreateCampaignPayload) {
+  const created = await apiRequest<CampaignSummary>('/campaigns', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+  const mappedCampaign = mapCampaign(created)
+  state.campaigns.unshift(mappedCampaign)
+  return mappedCampaign
+}
+
+async function createRule(campaignId: string, payload: CreateCampaignRulePayload) {
+  const rule = await apiRequest<CampaignRule>(`/campaigns/${campaignId}/rules`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+  state.rules.unshift(mapRule(rule))
+  return rule
+}
+
+async function createAudience(campaignId: string, payload: CreateCampaignAudiencePayload) {
+  const audience = await apiRequest<CampaignAudience>(`/campaigns/${campaignId}/audiences`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+  state.audiences.unshift(mapAudience(audience))
+  return audience
+}
+
+async function createTemplate(campaignId: string, payload: CreateMessageTemplatePayload) {
+  const template = await apiRequest<MessageTemplate>(`/campaigns/${campaignId}/templates`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+  state.templates.unshift(mapTemplate(template))
+  return template
+}
+
 async function activateCampaign(campaignId: string) {
   const updated = await apiRequest<CampaignSummary>(`/campaigns/${campaignId}/activate`, {
     method: 'POST',
@@ -252,11 +298,12 @@ async function pauseCampaign(campaignId: string) {
 
 async function createExecution(campaign: CampaignDto) {
   const requestPayload = textToJson(campaign.triggerConfig)
+  const triggeredBy = getAuthenticatedUsername() ?? 'admin-ui'
 
   const execution = await apiRequest<CampaignExecution>(`/campaigns/${campaign.id}/executions`, {
     method: 'POST',
     body: JSON.stringify({
-      triggeredBy: 'admin-ui',
+      triggeredBy,
       requestPayload,
     }),
   })
@@ -270,6 +317,10 @@ export function useCampaignService() {
     state,
     loadCampaigns,
     loadCampaignDetail,
+    createCampaign,
+    createRule,
+    createAudience,
+    createTemplate,
     updateCampaign,
     activateCampaign,
     pauseCampaign,
