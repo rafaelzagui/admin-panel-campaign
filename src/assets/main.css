@@ -508,6 +508,70 @@ nav {
   gap: 1px;
 }
 
+.service-nav {
+  gap: 10px;
+}
+
+.service-nav-group {
+  display: grid;
+  gap: 5px;
+}
+
+.service-nav-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 9px;
+  color: var(--muted);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 10px;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.service-nav-heading:hover,
+.service-nav-heading.open {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border-soft);
+}
+
+.service-nav-heading svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.service-nav-heading span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-nav-chevron {
+  color: var(--muted) !important;
+  transition: transform 120ms ease;
+}
+
+.service-nav-heading.open .service-nav-chevron {
+  transform: rotate(180deg);
+}
+
+.service-nav-items {
+  display: grid;
+  gap: 1px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  margin-left: 16px;
+}
+
 .nav-item,
 .table-row,
 .secondary-button,
@@ -553,6 +617,23 @@ nav {
   padding: 0;
 }
 
+.collapsed .service-nav {
+  gap: 6px;
+}
+
+.collapsed .service-nav-heading {
+  justify-content: center;
+  padding: 0;
+}
+
+.collapsed .service-nav-items {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.collapsed .service-nav-heading span,
+.collapsed .service-nav-chevron,
 .collapsed .nav-item span,
 .collapsed .sidebar-footer,
 .collapsed .brand div:not(.brand-mark) {
@@ -1712,10 +1793,17 @@ textarea:focus {
   }
 
   .brand div:not(.brand-mark),
+  .service-nav-heading span,
+  .service-nav-chevron,
   .nav-item span,
   .sidebar-footer,
   .collapse-button {
     display: none;
+  }
+
+  .service-nav-heading {
+    justify-content: center;
+    padding: 0;
   }
 
   .nav-item {
@@ -1753,6 +1841,22 @@ textarea:focus {
 
   .sidebar nav {
     display: flex;
+    min-width: max-content;
+  }
+
+  .service-nav-group,
+  .service-nav-items {
+    display: flex;
+    align-items: center;
+  }
+
+  .service-nav-items {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .service-nav-heading {
     min-width: max-content;
   }
 

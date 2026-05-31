@@ -112,6 +112,10 @@ function replaceCollection<T>(target: T[], items: T[]) {
   target.splice(0, target.length, ...items)
 }
 
+function replaceCampaignCollection<T extends { campaignId: string }>(target: T[], campaignId: string, items: T[]) {
+  target.splice(0, target.length, ...target.filter((item) => item.campaignId !== campaignId), ...items)
+}
+
 function buildUpdatePayload(campaign: CampaignDto): UpdateCampaignPayload {
   return {
     name: campaign.name,
@@ -127,6 +131,39 @@ function buildUpdatePayload(campaign: CampaignDto): UpdateCampaignPayload {
   }
 }
 
+async function loadLinkedDataForCampaigns(campaignIds: string[]) {
+  if (!campaignIds.length) {
+    replaceCollection(state.rules, [])
+    replaceCollection(state.audiences, [])
+    replaceCollection(state.templates, [])
+    replaceCollection(state.auditEvents, [])
+    return
+  }
+
+  const results = await Promise.allSettled(
+    campaignIds.map(async (campaignId) => {
+      const [rules, audiences, templates, executions] = await Promise.all([
+        apiRequest<CampaignRule[]>(`/campaigns/${campaignId}/rules`),
+        apiRequest<CampaignAudience[]>(`/campaigns/${campaignId}/audiences`),
+        apiRequest<MessageTemplate[]>(`/campaigns/${campaignId}/templates`),
+        apiRequest<CampaignExecution[]>(`/campaigns/${campaignId}/executions`),
+      ])
+
+      return { rules, audiences, templates, executions }
+    }),
+  )
+  const loaded = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
+
+  replaceCollection(state.rules, loaded.flatMap((item) => item.rules.map(mapRule)))
+  replaceCollection(state.audiences, loaded.flatMap((item) => item.audiences.map(mapAudience)))
+  replaceCollection(state.templates, loaded.flatMap((item) => item.templates.map(mapTemplate)))
+  replaceCollection(state.auditEvents, loaded.flatMap((item) => item.executions.map(mapExecution)))
+
+  if (results.some((result) => result.status === 'rejected')) {
+    state.error = 'Alguns dados vinculados nao puderam ser carregados do campaign-service.'
+  }
+}
+
 async function loadCampaigns() {
   state.loading = true
   state.error = null
@@ -134,6 +171,7 @@ async function loadCampaigns() {
   try {
     const campaigns = await apiRequest<CampaignSummary[]>('/campaigns')
     replaceCollection(state.campaigns, campaigns.map(mapCampaign))
+    await loadLinkedDataForCampaigns(campaigns.map((campaign) => campaign.id))
     state.usingMock = false
   } catch (error) {
     state.error = error instanceof Error ? error.message : 'Nao foi possivel carregar campanhas.'
@@ -165,10 +203,10 @@ async function loadCampaignDetail(campaignId: string) {
       state.campaigns.unshift(mappedCampaign)
     }
 
-    replaceCollection(state.rules, rules.map(mapRule))
-    replaceCollection(state.audiences, audiences.map(mapAudience))
-    replaceCollection(state.templates, templates.map(mapTemplate))
-    replaceCollection(state.auditEvents, executions.map(mapExecution))
+    replaceCampaignCollection(state.rules, campaignId, rules.map(mapRule))
+    replaceCampaignCollection(state.audiences, campaignId, audiences.map(mapAudience))
+    replaceCampaignCollection(state.templates, campaignId, templates.map(mapTemplate))
+    replaceCampaignCollection(state.auditEvents, campaignId, executions.map(mapExecution))
     state.usingMock = false
   } catch (error) {
     state.error = error instanceof Error ? error.message : 'Nao foi possivel carregar detalhe da campanha.'
@@ -212,14 +250,14 @@ async function pauseCampaign(campaignId: string) {
   return mappedCampaign
 }
 
-async function createExecution(campaignId: string) {
-  const execution = await apiRequest<CampaignExecution>(`/campaigns/${campaignId}/executions`, {
+async function createExecution(campaign: CampaignDto) {
+  const requestPayload = textToJson(campaign.triggerConfig)
+
+  const execution = await apiRequest<CampaignExecution>(`/campaigns/${campaign.id}/executions`, {
     method: 'POST',
     body: JSON.stringify({
       triggeredBy: 'admin-ui',
-      requestPayload: {
-        reason: 'manual-trigger',
-      },
+      requestPayload,
     }),
   })
 

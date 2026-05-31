@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
+import { reactive } from 'vue'
 import {
   Activity,
+  Boxes,
+  ChevronDown,
   FileText,
   GitBranch,
   LayoutDashboard,
@@ -21,13 +24,33 @@ defineEmits<{
   navigate: [view: AdminView]
 }>()
 
-const navItems: Array<{ label: string; view: AdminView; icon: Component }> = [
-  { label: 'Campanhas', view: 'campaigns', icon: LayoutDashboard },
-  { label: 'Regras', view: 'rules', icon: GitBranch },
-  { label: 'Audiencias', view: 'audiences', icon: Users },
-  { label: 'Templates', view: 'templates', icon: FileText },
-  { label: 'Execucoes', view: 'executions', icon: Activity },
+const serviceGroups: Array<{
+  id: string
+  label: string
+  icon: Component
+  items: Array<{ label: string; view: AdminView; icon: Component }>
+}> = [
+  {
+    id: 'campaign-service',
+    label: 'Campaign Service',
+    icon: Boxes,
+    items: [
+      { label: 'Campanhas', view: 'campaigns', icon: LayoutDashboard },
+      { label: 'Rules', view: 'rules', icon: GitBranch },
+      { label: 'Audiences', view: 'audiences', icon: Users },
+      { label: 'Templates', view: 'templates', icon: FileText },
+      { label: 'Executions', view: 'executions', icon: Activity },
+    ],
+  },
 ]
+
+const openGroups = reactive<Record<string, boolean>>({
+  'campaign-service': true,
+})
+
+function toggleGroup(groupId: string) {
+  openGroups[groupId] = !openGroups[groupId]
+}
 </script>
 
 <template>
@@ -43,16 +66,29 @@ const navItems: Array<{ label: string; view: AdminView; icon: Component }> = [
         <PanelLeftClose v-else :size="16" />
       </button>
     </div>
-    <nav>
-      <button
-        v-for="item in navItems"
-        :key="item.view"
-        :class="['nav-item', { active: item.view === activeView }]"
-        @click="$emit('navigate', item.view)"
-      >
-        <component :is="item.icon" :size="17" />
-        <span>{{ item.label }}</span>
-      </button>
+    <nav class="service-nav">
+      <section v-for="group in serviceGroups" :key="group.id" class="service-nav-group">
+        <button
+          :class="['service-nav-heading', { open: openGroups[group.id] }]"
+          :aria-expanded="openGroups[group.id]"
+          @click="toggleGroup(group.id)"
+        >
+          <component :is="group.icon" :size="15" />
+          <span>{{ group.label }}</span>
+          <ChevronDown class="service-nav-chevron" :size="14" />
+        </button>
+        <div v-show="openGroups[group.id]" class="service-nav-items">
+          <button
+            v-for="item in group.items"
+            :key="item.view"
+            :class="['nav-item', { active: item.view === activeView }]"
+            @click="$emit('navigate', item.view)"
+          >
+            <component :is="item.icon" :size="17" />
+            <span>{{ item.label }}</span>
+          </button>
+        </div>
+      </section>
     </nav>
     <div v-if="!collapsed" class="sidebar-footer">
       <span>Truth source</span>

@@ -204,7 +204,7 @@ async function createExecution() {
   }
 
   try {
-    await requestExecution(campaign.id)
+    await requestExecution(campaign)
     showToast(
       'success',
       'Execucao criada',

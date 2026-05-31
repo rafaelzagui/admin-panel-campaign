@@ -9,6 +9,6 @@ services:
     ports:
       - "8080:80"
     environment:
-      CAMPAIGN_API_PROXY_TARGET: http://host.docker.internal:3000
+      CAMPAIGN_API_PROXY_TARGET: http://72.60.60.152:3001
     extra_hosts:
       - "host.docker.internal:host-gateway"
