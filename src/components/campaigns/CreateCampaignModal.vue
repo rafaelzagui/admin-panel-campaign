@@ -16,7 +16,7 @@ const form = reactive({
   timezone: 'America/Sao_Paulo',
   startsAt: '',
   endsAt: '',
-  triggerConfig: '{}',
+  triggerConfig: '{\n  "cron": "0 10 * * *",\n  "filters": {\n    "brands": [],\n    "onlyInStock": true,\n    "excludeKeywords": []\n  },\n  "searchTerms": [],\n  "marketplaces": [],\n  "runOncePerDay": true\n}',
   normalizationConfig: '{}',
   metadata: '{}',
 })

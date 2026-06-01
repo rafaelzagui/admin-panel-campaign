@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import CreateAudienceModal from '@/components/campaigns/CreateAudienceModal.vue'
+import EditAudienceModal from '@/components/campaigns/EditAudienceModal.vue'
 import StatusIndicator from '@/components/ui/StatusIndicator.vue'
-import type { CreateCampaignAudiencePayload } from '@/dtos/campaign-api.dto'
+import type { CreateCampaignAudiencePayload, UpdateCampaignAudiencePayload } from '@/dtos/campaign-api.dto'
+import type { CampaignLinkedEntityDto } from '@/dtos/campaign.dto'
 import { getApiErrorMessage } from '@/services/apiClient'
 import { useCampaignService } from '@/services/campaign.service'
 
@@ -10,8 +12,9 @@ const emit = defineEmits<{
   notify: [type: 'success' | 'error' | 'warning' | 'info', title: string, message: string]
 }>()
 
-const { state, createAudience } = useCampaignService()
+const { state, createAudience, updateAudience } = useCampaignService()
 const showCreateModal = ref(false)
+const editingAudience = ref<CampaignLinkedEntityDto | null>(null)
 
 const activeAudiences = computed(() =>
   state.audiences.filter((audience) => audience.status === 'ACTIVE').length,
@@ -19,6 +22,16 @@ const activeAudiences = computed(() =>
 
 function campaignName(campaignId: string) {
   return state.campaigns.find((campaign) => campaign.id === campaignId)?.name ?? 'Campanha removida'
+}
+
+async function submitAudienceUpdate(campaignId: string, audienceId: string, payload: UpdateCampaignAudiencePayload) {
+  try {
+    await updateAudience(campaignId, audienceId, payload)
+    editingAudience.value = null
+    emit('notify', 'success', 'Audiencia salva', 'A audiencia foi atualizada no campaign-service.')
+  } catch (error) {
+    emit('notify', 'error', 'Erro ao salvar audiencia', getApiErrorMessage(error))
+  }
 }
 
 async function submitAudience(campaignId: string, payload: CreateCampaignAudiencePayload) {
@@ -56,11 +69,11 @@ async function submitAudience(campaignId: string, payload: CreateCampaignAudienc
           <span>Campanha</span>
           <span>Status</span>
         </div>
-        <div v-for="audience in state.audiences" :key="audience.id" class="management-row three-col">
+        <button v-for="audience in state.audiences" :key="audience.id" class="management-row three-col clickable-row" @click="editingAudience = audience">
           <strong>{{ audience.name }}</strong>
           <span>{{ campaignName(audience.campaignId) }}</span>
           <StatusIndicator :status="audience.status" />
-        </div>
+        </button>
       </div>
     </article>
 
@@ -69,6 +82,12 @@ async function submitAudience(campaignId: string, payload: CreateCampaignAudienc
       :campaigns="state.campaigns"
       @close="showCreateModal = false"
       @create="submitAudience"
+    />
+    <EditAudienceModal
+      v-if="editingAudience"
+      :audience="editingAudience"
+      @close="editingAudience = null"
+      @save="submitAudienceUpdate"
     />
   </section>
 </template>

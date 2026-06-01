@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import CreateTemplateModal from '@/components/campaigns/CreateTemplateModal.vue'
+import EditTemplateModal from '@/components/campaigns/EditTemplateModal.vue'
 import StatusIndicator from '@/components/ui/StatusIndicator.vue'
-import type { CreateMessageTemplatePayload } from '@/dtos/campaign-api.dto'
+import type { CreateMessageTemplatePayload, UpdateMessageTemplatePayload } from '@/dtos/campaign-api.dto'
+import type { CampaignLinkedEntityDto } from '@/dtos/campaign.dto'
 import { getApiErrorMessage } from '@/services/apiClient'
 import { useCampaignService } from '@/services/campaign.service'
 
@@ -10,8 +12,9 @@ const emit = defineEmits<{
   notify: [type: 'success' | 'error' | 'warning' | 'info', title: string, message: string]
 }>()
 
-const { state, createTemplate } = useCampaignService()
+const { state, createTemplate, updateTemplate } = useCampaignService()
 const showCreateModal = ref(false)
+const editingTemplate = ref<CampaignLinkedEntityDto | null>(null)
 
 const activeTemplates = computed(() =>
   state.templates.filter((template) => template.status === 'ACTIVE').length,
@@ -19,6 +22,16 @@ const activeTemplates = computed(() =>
 
 function campaignName(campaignId: string) {
   return state.campaigns.find((campaign) => campaign.id === campaignId)?.name ?? 'Campanha removida'
+}
+
+async function submitTemplateUpdate(campaignId: string, templateId: string, payload: UpdateMessageTemplatePayload) {
+  try {
+    await updateTemplate(campaignId, templateId, payload)
+    editingTemplate.value = null
+    emit('notify', 'success', 'Template salvo', 'O template foi atualizado no campaign-service.')
+  } catch (error) {
+    emit('notify', 'error', 'Erro ao salvar template', getApiErrorMessage(error))
+  }
 }
 
 async function submitTemplate(campaignId: string, payload: CreateMessageTemplatePayload) {
@@ -56,11 +69,11 @@ async function submitTemplate(campaignId: string, payload: CreateMessageTemplate
           <span>Campanha</span>
           <span>Status</span>
         </div>
-        <div v-for="template in state.templates" :key="template.id" class="management-row three-col">
+        <button v-for="template in state.templates" :key="template.id" class="management-row three-col clickable-row" @click="editingTemplate = template">
           <strong>{{ template.name }}</strong>
           <span>{{ campaignName(template.campaignId) }}</span>
           <StatusIndicator :status="template.status" />
-        </div>
+        </button>
       </div>
     </article>
 
@@ -69,6 +82,12 @@ async function submitTemplate(campaignId: string, payload: CreateMessageTemplate
       :campaigns="state.campaigns"
       @close="showCreateModal = false"
       @create="submitTemplate"
+    />
+    <EditTemplateModal
+      v-if="editingTemplate"
+      :template="editingTemplate"
+      @close="editingTemplate = null"
+      @save="submitTemplateUpdate"
     />
   </section>
 </template>

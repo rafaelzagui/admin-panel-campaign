@@ -9,7 +9,10 @@ import type {
   CreateCampaignRulePayload,
   CreateMessageTemplatePayload,
   MessageTemplate,
+  UpdateCampaignAudiencePayload,
   UpdateCampaignPayload,
+  UpdateCampaignRulePayload,
+  UpdateMessageTemplatePayload,
 } from '@/dtos/campaign-api.dto'
 import type {
   AuditEventDto,
@@ -89,6 +92,10 @@ function mapAudience(audience: CampaignAudience): CampaignLinkedEntityDto {
     campaignId: audience.campaignId,
     name: audience.displayName ?? audience.identifier,
     status: audience.status,
+    type: audience.type,
+    identifier: audience.identifier,
+    displayName: audience.displayName,
+    payload: jsonToText(audience.payload),
   }
 }
 
@@ -98,6 +105,10 @@ function mapTemplate(template: MessageTemplate): CampaignLinkedEntityDto {
     campaignId: template.campaignId,
     name: template.name,
     status: template.status,
+    channel: template.channel,
+    content: template.content,
+    fallbackContent: template.fallbackContent,
+    variables: jsonToText(template.variables),
   }
 }
 
@@ -254,6 +265,17 @@ async function createRule(campaignId: string, payload: CreateCampaignRulePayload
   return rule
 }
 
+async function updateRule(campaignId: string, ruleId: string, payload: UpdateCampaignRulePayload) {
+  const rule = await apiRequest<CampaignRule>(`/campaigns/${campaignId}/rules/${ruleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  const mapped = mapRule(rule)
+  const index = state.rules.findIndex((item) => item.id === ruleId)
+  if (index >= 0) state.rules.splice(index, 1, mapped)
+  return rule
+}
+
 async function createAudience(campaignId: string, payload: CreateCampaignAudiencePayload) {
   const audience = await apiRequest<CampaignAudience>(`/campaigns/${campaignId}/audiences`, {
     method: 'POST',
@@ -264,6 +286,17 @@ async function createAudience(campaignId: string, payload: CreateCampaignAudienc
   return audience
 }
 
+async function updateAudience(campaignId: string, audienceId: string, payload: UpdateCampaignAudiencePayload) {
+  const audience = await apiRequest<CampaignAudience>(`/campaigns/${campaignId}/audiences/${audienceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  const mapped = mapAudience(audience)
+  const index = state.audiences.findIndex((item) => item.id === audienceId)
+  if (index >= 0) state.audiences.splice(index, 1, mapped)
+  return audience
+}
+
 async function createTemplate(campaignId: string, payload: CreateMessageTemplatePayload) {
   const template = await apiRequest<MessageTemplate>(`/campaigns/${campaignId}/templates`, {
     method: 'POST',
@@ -271,6 +304,17 @@ async function createTemplate(campaignId: string, payload: CreateMessageTemplate
   })
 
   state.templates.unshift(mapTemplate(template))
+  return template
+}
+
+async function updateTemplate(campaignId: string, templateId: string, payload: UpdateMessageTemplatePayload) {
+  const template = await apiRequest<MessageTemplate>(`/campaigns/${campaignId}/templates/${templateId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  const mapped = mapTemplate(template)
+  const index = state.templates.findIndex((item) => item.id === templateId)
+  if (index >= 0) state.templates.splice(index, 1, mapped)
   return template
 }
 
@@ -319,8 +363,11 @@ export function useCampaignService() {
     loadCampaignDetail,
     createCampaign,
     createRule,
+    updateRule,
     createAudience,
+    updateAudience,
     createTemplate,
+    updateTemplate,
     updateCampaign,
     activateCampaign,
     pauseCampaign,

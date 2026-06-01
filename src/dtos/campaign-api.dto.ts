@@ -176,3 +176,7 @@ export type CreateMessageTemplatePayload = {
   variables?: JsonRecord | null
   status?: MessageTemplate['status']
 }
+
+export type UpdateCampaignRulePayload = Partial<CreateCampaignRulePayload>
+export type UpdateCampaignAudiencePayload = Partial<CreateCampaignAudiencePayload>
+export type UpdateMessageTemplatePayload = Partial<CreateMessageTemplatePayload>

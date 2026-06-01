@@ -61,6 +61,14 @@ export type CampaignLinkedEntityDto = {
   campaignId: string
   name: string
   status: EntityStatus
+  type?: string
+  identifier?: string
+  displayName?: string | null
+  payload?: string
+  channel?: string
+  content?: string
+  fallbackContent?: string | null
+  variables?: string
 }
 
 export type AuditEventDto = {

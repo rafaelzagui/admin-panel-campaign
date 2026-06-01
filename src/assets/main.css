@@ -1628,6 +1628,21 @@ textarea:focus {
   color: var(--muted);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.management-row.clickable-row {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  cursor: pointer;
+}
+
+.management-row.clickable-row:hover {
+  color: var(--text);
+  background: var(--surface-alt);
+  box-shadow: inset 2px 0 0 var(--primary);
 }
 
 .management-row:last-child {
