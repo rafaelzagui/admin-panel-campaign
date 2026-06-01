@@ -49,6 +49,21 @@ export type GovernanceRule = {
   updatedAt: string
 }
 
+export type DispatchCadenceConfig = {
+  id: string
+  spacingMinMs: number
+  spacingMaxMs: number
+  limiterMax: number
+  limiterDurationMs: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type UpdateDispatchCadenceConfigPayload = Pick<
+  DispatchCadenceConfig,
+  'spacingMinMs' | 'spacingMaxMs' | 'limiterMax' | 'limiterDurationMs'
+>
+
 export type CreateDispatchInstancePayload = {
   instanceName: string
   id?: string

@@ -17,27 +17,37 @@ import {
   getDispatchApiErrorMessage,
   type CreateDispatchInstancePayload,
   type CreateGovernanceRulePayload,
+  type DispatchCadenceConfig,
   type DispatchConfigSummary,
   type DispatchDebugEntry,
   type DispatchGroup,
   type DispatchInstance,
   type GovernanceRule,
+  type UpdateDispatchCadenceConfigPayload,
 } from '@/services/dispatch.service'
 
 const DEFAULT_EVENTS = 'MESSAGES_UPSERT, CONNECTION_UPDATE'
+const DISPATCH_CADENCE_DEFAULTS: UpdateDispatchCadenceConfigPayload = {
+  spacingMinMs: 3000,
+  spacingMaxMs: 8000,
+  limiterMax: 1,
+  limiterDurationMs: 10000,
+}
 
 const config = ref<DispatchConfigSummary | null>(null)
 const instances = ref<DispatchInstance[]>([])
 const groups = ref<DispatchGroup[]>([])
 const rules = ref<GovernanceRule[]>([])
+const dispatchCadenceConfig = ref<DispatchCadenceConfig | null>(null)
 const selectedId = ref('')
-const activePanel = ref<'overview' | 'instances' | 'connection' | 'webhook' | 'groups' | 'governance' | 'debug'>('overview')
+const activePanel = ref<'overview' | 'instances' | 'connection' | 'webhook' | 'groups' | 'governance' | 'cadence' | 'debug'>('overview')
 const loading = ref(false)
 const busyAction = ref('')
 const alert = ref<{ type: 'success' | 'warning' | 'error' | 'info'; message: string } | null>(null)
 const debugEntry = ref<DispatchDebugEntry | null>(null)
 const qrImage = ref('')
 const search = ref('')
+const cadenceSaved = ref(false)
 
 const credentials = ref({
   username: '',
@@ -75,6 +85,8 @@ const governanceForm = ref({
   description: '',
 })
 
+const cadenceForm = ref<UpdateDispatchCadenceConfigPayload>({ ...DISPATCH_CADENCE_DEFAULTS })
+
 const selectedInstance = computed(() => instances.value.find((instance) => instance.id === selectedId.value) ?? null)
 const filteredInstances = computed(() => {
   const term = search.value.trim().toLowerCase()
@@ -97,6 +109,11 @@ const filteredInstances = computed(() => {
 
 const selectedStatusClass = computed(() => statusClass(selectedInstance.value?.lastState))
 const canCallAdmin = computed(() => credentials.value.username.trim() && credentials.value.password)
+const cadenceWindowSummary = computed(() => {
+  const minSeconds = cadenceForm.value.spacingMinMs / 1000
+  const maxSeconds = cadenceForm.value.spacingMaxMs / 1000
+  return `${minSeconds.toLocaleString('pt-BR')}s - ${maxSeconds.toLocaleString('pt-BR')}s`
+})
 
 function showAlert(type: typeof alert.value extends infer T ? T extends { type: infer U } ? U : never : never, message: string) {
   alert.value = { type, message }
@@ -122,6 +139,51 @@ function compact<T extends Record<string, unknown>>(value: T) {
       return true
     }),
   ) as Partial<T>
+}
+
+function cadencePayload(): UpdateDispatchCadenceConfigPayload {
+  return {
+    spacingMinMs: Number(cadenceForm.value.spacingMinMs),
+    spacingMaxMs: Number(cadenceForm.value.spacingMaxMs),
+    limiterMax: Number(cadenceForm.value.limiterMax),
+    limiterDurationMs: Number(cadenceForm.value.limiterDurationMs),
+  }
+}
+
+function validateCadenceForm() {
+  const payload = cadencePayload()
+  const errors: string[] = []
+
+  if (!Number.isFinite(payload.spacingMinMs) || payload.spacingMinMs < 0) {
+    errors.push('spacingMinMs deve ser maior ou igual a 0.')
+  }
+
+  if (!Number.isFinite(payload.spacingMaxMs) || payload.spacingMaxMs < 0) {
+    errors.push('spacingMaxMs deve ser maior ou igual a 0.')
+  }
+
+  if (Number.isFinite(payload.spacingMinMs) && Number.isFinite(payload.spacingMaxMs) && payload.spacingMaxMs < payload.spacingMinMs) {
+    errors.push('spacingMaxMs deve ser maior ou igual a spacingMinMs.')
+  }
+
+  if (!Number.isFinite(payload.limiterMax) || payload.limiterMax < 1) {
+    errors.push('limiterMax deve ser maior ou igual a 1.')
+  }
+
+  if (!Number.isFinite(payload.limiterDurationMs) || payload.limiterDurationMs < 1000) {
+    errors.push('limiterDurationMs deve ser maior ou igual a 1000.')
+  }
+
+  return errors
+}
+
+function fillCadenceForm(nextConfig: DispatchCadenceConfig) {
+  cadenceForm.value = {
+    spacingMinMs: nextConfig.spacingMinMs,
+    spacingMaxMs: nextConfig.spacingMaxMs,
+    limiterMax: nextConfig.limiterMax,
+    limiterDurationMs: nextConfig.limiterDurationMs,
+  }
 }
 
 function basicAuth() {
@@ -411,6 +473,53 @@ async function createRule() {
   })
 }
 
+async function loadDispatchCadenceConfig() {
+  if (!governanceForm.value.secret.trim()) return showAlert('warning', 'Informe o Governance Secret.')
+
+  await withBusy('cadence-load', async () => {
+    const nextConfig = await dispatchRequest<DispatchCadenceConfig>('/governance/dispatch-config/global', {
+      governanceSecret: governanceForm.value.secret.trim(),
+      onDebug: debug,
+    })
+    dispatchCadenceConfig.value = nextConfig
+    fillCadenceForm(nextConfig)
+    cadenceSaved.value = false
+    showAlert('success', 'Configuracao de cadencia carregada.')
+  })
+}
+
+async function saveDispatchCadenceConfig() {
+  if (!governanceForm.value.secret.trim()) return showAlert('warning', 'Informe o Governance Secret.')
+  if (!dispatchCadenceConfig.value?.id) {
+    return showAlert('warning', 'Carregue a configuracao antes de salvar.')
+  }
+
+  const errors = validateCadenceForm()
+  if (errors.length) return showAlert('warning', errors.join('\n'))
+
+  await withBusy('cadence-save', async () => {
+    const nextConfig = await dispatchRequest<DispatchCadenceConfig>(
+      `/governance/dispatch-config/${encodeURIComponent(dispatchCadenceConfig.value!.id)}`,
+      {
+        method: 'PATCH',
+        body: cadencePayload(),
+        governanceSecret: governanceForm.value.secret.trim(),
+        onDebug: debug,
+      },
+    )
+    dispatchCadenceConfig.value = nextConfig
+    fillCadenceForm(nextConfig)
+    cadenceSaved.value = true
+    showAlert('success', 'Configuracao salva. Reinicie o dispatch-service para o consumer carregar os novos valores.')
+  })
+}
+
+function resetCadenceDefaults() {
+  cadenceForm.value = { ...DISPATCH_CADENCE_DEFAULTS }
+  cadenceSaved.value = false
+  showAlert('info', 'Defaults aplicados ao formulario. Clique em salvar para persistir.')
+}
+
 function useGroupInGovernance(group: DispatchGroup) {
   governanceForm.value.value = group.jid
   governanceForm.value.scopeType = 'group'
@@ -485,6 +594,7 @@ async function copy(value: string, message: string) {
               ['webhook', 'Webhook'],
               ['groups', 'Grupos'],
               ['governance', 'Governance'],
+              ['cadence', 'Cadencia de mensagens'],
               ['debug', 'Debug'],
             ]"
             :key="panel[0]"
@@ -785,6 +895,80 @@ async function copy(value: string, message: string) {
                 <code>{{ rule.instanceId || 'global' }}</code>
               </div>
             </div>
+          </section>
+        </section>
+
+        <section v-else-if="activePanel === 'cadence'" class="panel-stack">
+          <section class="panel">
+            <div class="workspace-panel-heading">
+              <div>
+                <h2>Cadencia de mensagens</h2>
+                <p>Delay e limiter usados pelo consumer do dispatch-service.</p>
+              </div>
+              <ShieldCheck :size="16" />
+            </div>
+            <form class="dispatch-form" @submit.prevent="saveDispatchCadenceConfig">
+              <label>
+                Governance Secret
+                <input v-model="governanceForm.secret" type="password" autocomplete="off" />
+              </label>
+              <div class="action-row cadence-load-row">
+                <button class="secondary-button" type="button" :disabled="loading" @click="loadDispatchCadenceConfig">
+                  <RefreshCw :size="14" /> Carregar configuracao
+                </button>
+              </div>
+
+              <div class="metrics cadence-metrics">
+                <div class="metric">
+                  <span>Config ID</span>
+                  <strong class="dispatch-metric-text">{{ dispatchCadenceConfig?.id || '-' }}</strong>
+                </div>
+                <div class="metric">
+                  <span>Delay</span>
+                  <strong class="dispatch-metric-text">{{ cadenceWindowSummary }}</strong>
+                </div>
+                <div class="metric">
+                  <span>Limiter</span>
+                  <strong>{{ cadenceForm.limiterMax }}</strong>
+                </div>
+                <div class="metric">
+                  <span>Janela</span>
+                  <strong class="dispatch-metric-text">{{ cadenceForm.limiterDurationMs }}ms</strong>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <label>
+                  spacingMinMs
+                  <input v-model.number="cadenceForm.spacingMinMs" type="number" min="0" step="1" />
+                </label>
+                <label>
+                  spacingMaxMs
+                  <input v-model.number="cadenceForm.spacingMaxMs" type="number" min="0" step="1" />
+                </label>
+                <label>
+                  limiterMax
+                  <input v-model.number="cadenceForm.limiterMax" type="number" min="1" step="1" />
+                </label>
+                <label>
+                  limiterDurationMs
+                  <input v-model.number="cadenceForm.limiterDurationMs" type="number" min="1000" step="1" />
+                </label>
+              </div>
+
+              <div v-if="cadenceSaved" class="alert warn-alert cadence-restart-alert">
+                Configuracao salva. Reinicie o dispatch-service para o consumer carregar os novos valores.
+              </div>
+
+              <div class="action-row">
+                <button class="secondary-button" type="button" :disabled="loading" @click="resetCadenceDefaults">
+                  <RefreshCw :size="14" /> Resetar defaults
+                </button>
+                <button class="primary-button" :disabled="loading">
+                  <Save :size="14" /> Salvar configuracao
+                </button>
+              </div>
+            </form>
           </section>
         </section>
 
