@@ -18,12 +18,16 @@ import {
   type CreateDispatchInstancePayload,
   type CreateGovernanceRulePayload,
   type DispatchCadenceConfig,
+  type DispatchCategory,
   type DispatchConfigSummary,
   type DispatchDebugEntry,
   type DispatchGroup,
   type DispatchInstance,
+  type DispatchTarget,
   type GovernanceRule,
   type UpdateDispatchCadenceConfigPayload,
+  type UpsertDispatchCategoryPayload,
+  type UpsertDispatchTargetPayload,
 } from '@/services/dispatch.service'
 
 const DEFAULT_EVENTS = 'MESSAGES_UPSERT, CONNECTION_UPDATE'
@@ -38,9 +42,12 @@ const config = ref<DispatchConfigSummary | null>(null)
 const instances = ref<DispatchInstance[]>([])
 const groups = ref<DispatchGroup[]>([])
 const rules = ref<GovernanceRule[]>([])
+const dispatchTargets = ref<DispatchTarget[]>([])
+const targetGroups = ref<DispatchGroup[]>([])
+const categories = ref<DispatchCategory[]>([])
 const dispatchCadenceConfig = ref<DispatchCadenceConfig | null>(null)
 const selectedId = ref('')
-const activePanel = ref<'overview' | 'instances' | 'connection' | 'webhook' | 'groups' | 'governance' | 'cadence' | 'debug'>('overview')
+const activePanel = ref<'overview' | 'instances' | 'connection' | 'webhook' | 'groups' | 'governance' | 'cadence' | 'targets' | 'categories' | 'debug'>('overview')
 const loading = ref(false)
 const busyAction = ref('')
 const alert = ref<{ type: 'success' | 'warning' | 'error' | 'info'; message: string } | null>(null)
@@ -77,7 +84,6 @@ const webhookForm = ref({
 })
 
 const governanceForm = ref({
-  secret: import.meta.env.VITE_GOVERNANCE_API_SECRET ?? '',
   value: '',
   scopeType: 'group' as 'group' | 'contact',
   mode: 'allow' as 'allow' | 'block',
@@ -86,6 +92,28 @@ const governanceForm = ref({
 })
 
 const cadenceForm = ref<UpdateDispatchCadenceConfigPayload>({ ...DISPATCH_CADENCE_DEFAULTS })
+const targetForm = ref({
+  id: '',
+  campaignId: '',
+  niche: '',
+  instanceId: '',
+  groupJid: '',
+  priority: 0,
+  active: true,
+  exclusive: false,
+  titleAny: '',
+  titleRegex: '',
+  priceMin: '',
+  priceMax: '',
+})
+const categoryForm = ref({
+  id: '',
+  name: '',
+  aliases: '',
+  maxPerWindow: 1,
+  windowMinutes: 60,
+  active: true,
+})
 
 const selectedInstance = computed(() => instances.value.find((instance) => instance.id === selectedId.value) ?? null)
 const filteredInstances = computed(() => {
@@ -114,6 +142,8 @@ const cadenceWindowSummary = computed(() => {
   const maxSeconds = cadenceForm.value.spacingMaxMs / 1000
   return `${minSeconds.toLocaleString('pt-BR')}s - ${maxSeconds.toLocaleString('pt-BR')}s`
 })
+const targetFormTitle = computed(() => targetForm.value.id ? 'Editar target' : 'Criar target')
+const categoryFormTitle = computed(() => categoryForm.value.id ? 'Editar categoria' : 'Criar categoria')
 
 function showAlert(type: typeof alert.value extends infer T ? T extends { type: infer U } ? U : never : never, message: string) {
   alert.value = { type, message }
@@ -128,6 +158,10 @@ function splitCsv(value: string) {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function parseTags(value: string) {
+  return splitCsv(value.replace(/\n/g, ','))
 }
 
 function compact<T extends Record<string, unknown>>(value: T) {
@@ -148,6 +182,75 @@ function cadencePayload(): UpdateDispatchCadenceConfigPayload {
     limiterMax: Number(cadenceForm.value.limiterMax),
     limiterDurationMs: Number(cadenceForm.value.limiterDurationMs),
   }
+}
+
+function parseOptionalNumber(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : Number.NaN
+}
+
+function targetPayload(): UpsertDispatchTargetPayload {
+  const priceMin = parseOptionalNumber(targetForm.value.priceMin)
+  const priceMax = parseOptionalNumber(targetForm.value.priceMax)
+  const priceRange = priceMin !== null || priceMax !== null
+    ? compact({
+      min: priceMin,
+      max: priceMax,
+    })
+    : undefined
+
+  return {
+    campaignId: targetForm.value.campaignId.trim() || null,
+    niche: targetForm.value.niche.trim(),
+    instanceId: targetForm.value.instanceId,
+    groupJid: targetForm.value.groupJid,
+    priority: Number(targetForm.value.priority),
+    active: targetForm.value.active,
+    exclusive: targetForm.value.exclusive,
+    matchRules: compact({
+      titleAny: parseTags(targetForm.value.titleAny),
+      titleRegex: targetForm.value.titleRegex.trim(),
+      priceRange,
+    }),
+  }
+}
+
+function validateTargetForm() {
+  const payload = targetPayload()
+  const errors: string[] = []
+  const min = parseOptionalNumber(targetForm.value.priceMin)
+  const max = parseOptionalNumber(targetForm.value.priceMax)
+
+  if (!payload.instanceId) errors.push('instanceId e obrigatorio.')
+  if (!payload.groupJid) errors.push('groupJid e obrigatorio.')
+  if (!Number.isFinite(payload.priority) || payload.priority < 0) errors.push('priority deve ser maior ou igual a 0.')
+  if (Number.isNaN(min) || Number.isNaN(max)) errors.push('priceRange min/max precisam ser numericos quando preenchidos.')
+
+  return errors
+}
+
+function categoryPayload(): UpsertDispatchCategoryPayload {
+  return {
+    name: categoryForm.value.name.trim(),
+    aliases: parseTags(categoryForm.value.aliases),
+    maxPerWindow: Number(categoryForm.value.maxPerWindow),
+    windowMinutes: Number(categoryForm.value.windowMinutes),
+    active: categoryForm.value.active,
+  }
+}
+
+function validateCategoryForm() {
+  const payload = categoryPayload()
+  const errors: string[] = []
+
+  if (!payload.name) errors.push('name e obrigatorio.')
+  if (!Number.isFinite(payload.maxPerWindow) || payload.maxPerWindow < 1) errors.push('maxPerWindow deve ser maior ou igual a 1.')
+  if (!Number.isFinite(payload.windowMinutes) || payload.windowMinutes < 1) errors.push('windowMinutes deve ser maior ou igual a 1.')
+  if (!payload.aliases.length) errors.push('Cadastre pelo menos 1 alias para a categoria classificar produtos.')
+
+  return errors
 }
 
 function validateCadenceForm() {
@@ -436,11 +539,8 @@ async function listGroups() {
 }
 
 async function listRules() {
-  if (!governanceForm.value.secret.trim()) return showAlert('warning', 'Informe o Governance Secret.')
-
   await withBusy('rules', async () => {
-    rules.value = await dispatchRequest<GovernanceRule[]>('/governance/rules', {
-      governanceSecret: governanceForm.value.secret.trim(),
+    rules.value = await dispatchRequest<GovernanceRule[]>('/api/admin/governance-rules', {
       onDebug: debug,
     })
     showAlert('success', 'Regras carregadas.')
@@ -448,7 +548,6 @@ async function listRules() {
 }
 
 async function createRule() {
-  if (!governanceForm.value.secret.trim()) return showAlert('warning', 'Informe o Governance Secret.')
   if (!governanceForm.value.value.trim()) return showAlert('warning', 'Informe o destino da regra.')
 
   await withBusy('create-rule', async () => {
@@ -461,10 +560,9 @@ async function createRule() {
       active: true,
     }) as CreateGovernanceRulePayload
 
-    await dispatchRequest<GovernanceRule>('/governance/rules', {
+    await dispatchRequest<GovernanceRule>('/api/admin/governance-rules', {
       method: 'POST',
       body: payload,
-      governanceSecret: governanceForm.value.secret.trim(),
       onDebug: debug,
     })
     governanceForm.value.value = ''
@@ -474,11 +572,8 @@ async function createRule() {
 }
 
 async function loadDispatchCadenceConfig() {
-  if (!governanceForm.value.secret.trim()) return showAlert('warning', 'Informe o Governance Secret.')
-
   await withBusy('cadence-load', async () => {
-    const nextConfig = await dispatchRequest<DispatchCadenceConfig>('/governance/dispatch-config/global', {
-      governanceSecret: governanceForm.value.secret.trim(),
+    const nextConfig = await dispatchRequest<DispatchCadenceConfig>('/api/admin/dispatch-config/global', {
       onDebug: debug,
     })
     dispatchCadenceConfig.value = nextConfig
@@ -489,7 +584,6 @@ async function loadDispatchCadenceConfig() {
 }
 
 async function saveDispatchCadenceConfig() {
-  if (!governanceForm.value.secret.trim()) return showAlert('warning', 'Informe o Governance Secret.')
   if (!dispatchCadenceConfig.value?.id) {
     return showAlert('warning', 'Carregue a configuracao antes de salvar.')
   }
@@ -499,11 +593,10 @@ async function saveDispatchCadenceConfig() {
 
   await withBusy('cadence-save', async () => {
     const nextConfig = await dispatchRequest<DispatchCadenceConfig>(
-      `/governance/dispatch-config/${encodeURIComponent(dispatchCadenceConfig.value!.id)}`,
+      `/api/admin/dispatch-config/${encodeURIComponent(dispatchCadenceConfig.value!.id)}`,
       {
         method: 'PATCH',
         body: cadencePayload(),
-        governanceSecret: governanceForm.value.secret.trim(),
         onDebug: debug,
       },
     )
@@ -527,6 +620,181 @@ function useGroupInGovernance(group: DispatchGroup) {
   governanceForm.value.direction = 'outbound'
   activePanel.value = 'governance'
   showAlert('success', 'JID aplicado ao formulario de governance.')
+}
+
+async function loadDispatchTargets() {
+  await withBusy('targets-load', async () => {
+    dispatchTargets.value = await dispatchRequest<DispatchTarget[]>('/api/admin/dispatch-targets', {
+      onDebug: debug,
+    })
+    showAlert('success', 'Targets carregados.')
+  })
+}
+
+async function loadTargetInstances() {
+  await withBusy('target-instances', async () => {
+    instances.value = await dispatchRequest<DispatchInstance[]>('/api/admin/dispatch-targets/instances', {
+      onDebug: debug,
+    })
+    showAlert('success', 'Instancias para targets carregadas.')
+  })
+}
+
+async function loadTargetGroups() {
+  if (!targetForm.value.instanceId) {
+    targetGroups.value = []
+    targetForm.value.groupJid = ''
+    return
+  }
+
+  await withBusy('target-groups', async () => {
+    targetGroups.value = await dispatchRequest<DispatchGroup[]>(
+      `/api/admin/dispatch-targets/instances/${encodeURIComponent(targetForm.value.instanceId)}/groups`,
+      { onDebug: debug },
+    )
+    if (targetForm.value.groupJid && !targetGroups.value.some((group) => group.jid === targetForm.value.groupJid)) {
+      targetForm.value.groupJid = ''
+    }
+    showAlert('success', 'Grupos da instancia carregados.')
+  })
+}
+
+function editDispatchTarget(target: DispatchTarget) {
+  targetForm.value = {
+    id: target.id,
+    campaignId: target.campaignId ?? '',
+    niche: target.niche ?? '',
+    instanceId: target.instanceId,
+    groupJid: target.groupJid,
+    priority: target.priority ?? 0,
+    active: target.active,
+    exclusive: target.exclusive,
+    titleAny: target.matchRules?.titleAny?.join(', ') ?? '',
+    titleRegex: target.matchRules?.titleRegex ?? '',
+    priceMin: target.matchRules?.priceRange?.min?.toString() ?? '',
+    priceMax: target.matchRules?.priceRange?.max?.toString() ?? '',
+  }
+  targetGroups.value = []
+  void loadTargetGroups()
+}
+
+function resetTargetForm() {
+  targetForm.value = {
+    id: '',
+    campaignId: '',
+    niche: '',
+    instanceId: '',
+    groupJid: '',
+    priority: 0,
+    active: true,
+    exclusive: false,
+    titleAny: '',
+    titleRegex: '',
+    priceMin: '',
+    priceMax: '',
+  }
+  targetGroups.value = []
+}
+
+async function saveDispatchTarget() {
+  const errors = validateTargetForm()
+  if (errors.length) return showAlert('warning', errors.join('\n'))
+
+  await withBusy('target-save', async () => {
+    const path = targetForm.value.id
+      ? `/api/admin/dispatch-targets/${encodeURIComponent(targetForm.value.id)}`
+      : '/api/admin/dispatch-targets'
+    const method = targetForm.value.id ? 'PATCH' : 'POST'
+
+    await dispatchRequest<DispatchTarget>(path, {
+      method,
+      body: targetPayload(),
+      onDebug: debug,
+    })
+    resetTargetForm()
+    await loadDispatchTargets()
+    showAlert('success', 'Target salvo.')
+  })
+}
+
+async function deleteDispatchTarget(targetId: string) {
+  if (!window.confirm(`Excluir o target ${targetId}?`)) return
+
+  await withBusy(`target-delete:${targetId}`, async () => {
+    await dispatchRequest<unknown>(`/api/admin/dispatch-targets/${encodeURIComponent(targetId)}`, {
+      method: 'DELETE',
+      onDebug: debug,
+    })
+    if (targetForm.value.id === targetId) resetTargetForm()
+    await loadDispatchTargets()
+    showAlert('success', 'Target excluido.')
+  })
+}
+
+async function loadCategories() {
+  await withBusy('categories-load', async () => {
+    categories.value = await dispatchRequest<DispatchCategory[]>('/api/admin/categories', {
+      onDebug: debug,
+    })
+    showAlert('success', 'Categorias carregadas.')
+  })
+}
+
+function editCategory(category: DispatchCategory) {
+  categoryForm.value = {
+    id: category.id,
+    name: category.name,
+    aliases: category.aliases.join(', '),
+    maxPerWindow: category.maxPerWindow,
+    windowMinutes: category.windowMinutes,
+    active: category.active,
+  }
+}
+
+function resetCategoryForm() {
+  categoryForm.value = {
+    id: '',
+    name: '',
+    aliases: '',
+    maxPerWindow: 1,
+    windowMinutes: 60,
+    active: true,
+  }
+}
+
+async function saveCategory() {
+  const errors = validateCategoryForm()
+  if (errors.length) return showAlert('warning', errors.join('\n'))
+
+  await withBusy('category-save', async () => {
+    const path = categoryForm.value.id
+      ? `/api/admin/categories/${encodeURIComponent(categoryForm.value.id)}`
+      : '/api/admin/categories'
+    const method = categoryForm.value.id ? 'PATCH' : 'POST'
+
+    await dispatchRequest<DispatchCategory>(path, {
+      method,
+      body: categoryPayload(),
+      onDebug: debug,
+    })
+    resetCategoryForm()
+    await loadCategories()
+    showAlert('success', 'Categoria salva.')
+  })
+}
+
+async function deleteCategory(categoryId: string) {
+  if (!window.confirm(`Excluir a categoria ${categoryId}?`)) return
+
+  await withBusy(`category-delete:${categoryId}`, async () => {
+    await dispatchRequest<unknown>(`/api/admin/categories/${encodeURIComponent(categoryId)}`, {
+      method: 'DELETE',
+      onDebug: debug,
+    })
+    if (categoryForm.value.id === categoryId) resetCategoryForm()
+    await loadCategories()
+    showAlert('success', 'Categoria excluida.')
+  })
 }
 
 async function copy(value: string, message: string) {
@@ -595,6 +863,8 @@ async function copy(value: string, message: string) {
               ['groups', 'Grupos'],
               ['governance', 'Governance'],
               ['cadence', 'Cadencia de mensagens'],
+              ['targets', 'Dispatch targets'],
+              ['categories', 'Categorias'],
               ['debug', 'Debug'],
             ]"
             :key="panel[0]"
@@ -837,10 +1107,6 @@ async function copy(value: string, message: string) {
             <form class="dispatch-form" @submit.prevent="createRule">
               <div class="form-grid">
                 <label>
-                  Governance Secret
-                  <input v-model="governanceForm.secret" type="password" autocomplete="off" />
-                </label>
-                <label>
                   Destino
                   <input v-model="governanceForm.value" placeholder="grupo@g.us ou telefone" />
                 </label>
@@ -908,10 +1174,6 @@ async function copy(value: string, message: string) {
               <ShieldCheck :size="16" />
             </div>
             <form class="dispatch-form" @submit.prevent="saveDispatchCadenceConfig">
-              <label>
-                Governance Secret
-                <input v-model="governanceForm.secret" type="password" autocomplete="off" />
-              </label>
               <div class="action-row cadence-load-row">
                 <button class="secondary-button" type="button" :disabled="loading" @click="loadDispatchCadenceConfig">
                   <RefreshCw :size="14" /> Carregar configuracao
@@ -934,6 +1196,24 @@ async function copy(value: string, message: string) {
                 <div class="metric">
                   <span>Janela</span>
                   <strong class="dispatch-metric-text">{{ cadenceForm.limiterDurationMs }}ms</strong>
+                </div>
+              </div>
+              <div class="metrics cadence-metrics">
+                <div class="metric">
+                  <span>Dedup</span>
+                  <strong class="dispatch-metric-text">{{ dispatchCadenceConfig?.dedupWindowHours ?? '-' }}h</strong>
+                </div>
+                <div class="metric">
+                  <span>Price override</span>
+                  <strong>{{ dispatchCadenceConfig?.priceDropOverride ? 'Sim' : '-' }}</strong>
+                </div>
+                <div class="metric">
+                  <span>Min drop</span>
+                  <strong class="dispatch-metric-text">{{ dispatchCadenceConfig?.minDropPercent ?? '-' }}%</strong>
+                </div>
+                <div class="metric">
+                  <span>Atualizado</span>
+                  <strong class="dispatch-metric-text">{{ dispatchCadenceConfig?.updatedAt || '-' }}</strong>
                 </div>
               </div>
 
@@ -966,6 +1246,200 @@ async function copy(value: string, message: string) {
                 </button>
                 <button class="primary-button" :disabled="loading">
                   <Save :size="14" /> Salvar configuracao
+                </button>
+              </div>
+            </form>
+          </section>
+        </section>
+
+        <section v-else-if="activePanel === 'targets'" class="panel-stack">
+          <section class="panel">
+            <div class="workspace-panel-heading">
+              <div>
+                <h2>Dispatch targets</h2>
+                <p>Mapeie campanhas ou catch-all para grupos WhatsApp.</p>
+              </div>
+              <button class="primary-button" :disabled="loading" @click="loadDispatchTargets">
+                <RefreshCw :size="14" /> Atualizar
+              </button>
+            </div>
+            <div class="management-table wide-field">
+              <div class="management-row dispatch-targets-row table-head">
+                <span>Nicho</span>
+                <span>Campanha</span>
+                <span>Instancia</span>
+                <span>Grupo</span>
+                <span>Flags</span>
+                <span>Acoes</span>
+              </div>
+              <div v-if="!dispatchTargets.length" class="empty-state dispatch-empty">Nenhum target carregado.</div>
+              <div v-for="target in dispatchTargets" :key="target.id" class="management-row dispatch-targets-row">
+                <strong>{{ target.niche || '-' }}</strong>
+                <span>
+                  <code>{{ target.campaignId || 'catch-all' }}</code>
+                  <small v-if="!target.campaignId" class="fallback-note">fallback</small>
+                </span>
+                <code>{{ target.instanceId }}</code>
+                <code>{{ target.groupJid }}</code>
+                <span class="dispatch-badges">
+                  <span class="badge info">p{{ target.priority }}</span>
+                  <span :class="['badge', target.active ? 'good' : 'bad']">{{ target.active ? 'ativo' : 'inativo' }}</span>
+                  <span v-if="target.exclusive" class="badge warn">exclusive</span>
+                </span>
+                <span class="dispatch-actions">
+                  <button class="secondary-button" @click="editDispatchTarget(target)">Editar</button>
+                  <button class="secondary-button danger-action" @click="deleteDispatchTarget(target.id)">Excluir</button>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="workspace-panel-heading">
+              <div>
+                <h2>{{ targetFormTitle }}</h2>
+                <p>Menor numero em priority ganha precedencia; campaignId vazio vira catch-all.</p>
+              </div>
+              <button class="secondary-button" type="button" :disabled="loading" @click="loadTargetInstances">
+                Instancias
+              </button>
+            </div>
+            <form class="dispatch-form" @submit.prevent="saveDispatchTarget">
+              <div class="form-grid">
+                <label>
+                  Campaign ID
+                  <input v-model="targetForm.campaignId" placeholder="vazio = catch-all" />
+                </label>
+                <label>
+                  Nicho
+                  <input v-model="targetForm.niche" placeholder="ofertas, tech, casa" />
+                </label>
+                <label>
+                  Instance
+                  <select v-model="targetForm.instanceId" @change="loadTargetGroups">
+                    <option value="">Selecione</option>
+                    <option v-for="instance in instances" :key="instance.id" :value="instance.id">
+                      {{ instance.instanceName || instance.id }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  Grupo
+                  <select v-model="targetForm.groupJid" :disabled="!targetForm.instanceId">
+                    <option value="">Selecione</option>
+                    <option v-for="group in targetGroups" :key="group.jid" :value="group.jid">
+                      {{ group.subject || group.jid }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  Priority
+                  <input v-model.number="targetForm.priority" title="Menor numero = mais prioridade." type="number" min="0" step="1" />
+                </label>
+                <label>
+                  titleRegex
+                  <input v-model="targetForm.titleRegex" placeholder="opcional" />
+                </label>
+                <label>
+                  titleAny
+                  <input v-model="targetForm.titleAny" placeholder="fone, notebook, monitor" />
+                </label>
+                <label>
+                  priceRange min
+                  <input v-model="targetForm.priceMin" inputmode="decimal" placeholder="opcional" />
+                </label>
+                <label>
+                  priceRange max
+                  <input v-model="targetForm.priceMax" inputmode="decimal" placeholder="opcional" />
+                </label>
+              </div>
+              <div class="dispatch-checks">
+                <label><input v-model="targetForm.active" type="checkbox" /> Ativo</label>
+                <label><input v-model="targetForm.exclusive" type="checkbox" /> Exclusive</label>
+              </div>
+              <div class="action-row">
+                <button class="secondary-button" type="button" :disabled="loading" @click="resetTargetForm">Limpar</button>
+                <button class="primary-button" :disabled="loading">
+                  <Save :size="14" /> Salvar target
+                </button>
+              </div>
+            </form>
+          </section>
+        </section>
+
+        <section v-else-if="activePanel === 'categories'" class="panel-stack">
+          <section class="panel">
+            <div class="workspace-panel-heading">
+              <div>
+                <h2>Categorias</h2>
+                <p>Limite enxurrada de produtos por alias e janela.</p>
+              </div>
+              <button class="primary-button" :disabled="loading" @click="loadCategories">
+                <RefreshCw :size="14" /> Atualizar
+              </button>
+            </div>
+            <div class="management-table wide-field">
+              <div class="management-row dispatch-categories-row table-head">
+                <span>Nome</span>
+                <span>Aliases</span>
+                <span>Cadencia</span>
+                <span>Status</span>
+                <span>Acoes</span>
+              </div>
+              <div v-if="!categories.length" class="empty-state dispatch-empty">Nenhuma categoria carregada.</div>
+              <div v-for="category in categories" :key="category.id" class="management-row dispatch-categories-row">
+                <strong>{{ category.name }}</strong>
+                <span class="chip-list">
+                  <small v-for="alias in category.aliases" :key="alias">{{ alias }}</small>
+                  <small v-if="!category.aliases.length" class="fallback-note">sem alias</small>
+                </span>
+                <span>{{ category.maxPerWindow }} a cada {{ category.windowMinutes }}min</span>
+                <span :class="['badge', category.active ? 'good' : 'bad']">{{ category.active ? 'ativo' : 'inativo' }}</span>
+                <span class="dispatch-actions">
+                  <button class="secondary-button" @click="editCategory(category)">Editar</button>
+                  <button class="secondary-button danger-action" @click="deleteCategory(category.id)">Excluir</button>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="workspace-panel-heading">
+              <div>
+                <h2>{{ categoryFormTitle }}</h2>
+                <p>Aliases sao case/acento-insensitive; cadastre variantes como wi-fi e wifi separadamente.</p>
+              </div>
+              <ShieldCheck :size="16" />
+            </div>
+            <form class="dispatch-form" @submit.prevent="saveCategory">
+              <div class="form-grid">
+                <label>
+                  Nome
+                  <input v-model="categoryForm.name" required placeholder="Eletronicos" />
+                </label>
+                <label>
+                  Aliases
+                  <input v-model="categoryForm.aliases" placeholder="fone, headset, celular" />
+                </label>
+                <label>
+                  maxPerWindow
+                  <input v-model.number="categoryForm.maxPerWindow" type="number" min="1" step="1" />
+                </label>
+                <label>
+                  windowMinutes
+                  <input v-model.number="categoryForm.windowMinutes" type="number" min="1" step="1" />
+                </label>
+              </div>
+              <div class="dispatch-checks">
+                <label><input v-model="categoryForm.active" type="checkbox" /> Ativa</label>
+              </div>
+              <div class="alert warn-alert category-warning">
+                Categoria sem alias nao classifica nada. Fallback recebe categorias desconhecidas, mas nao limita de forma confiavel; "fone" nao casa "microfone".
+              </div>
+              <div class="action-row">
+                <button class="secondary-button" type="button" :disabled="loading" @click="resetCategoryForm">Limpar</button>
+                <button class="primary-button" :disabled="loading">
+                  <Save :size="14" /> Salvar categoria
                 </button>
               </div>
             </form>

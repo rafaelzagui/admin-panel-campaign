@@ -55,6 +55,9 @@ export type DispatchCadenceConfig = {
   spacingMaxMs: number
   limiterMax: number
   limiterDurationMs: number
+  dedupWindowHours?: number | null
+  priceDropOverride?: boolean | null
+  minDropPercent?: number | null
   createdAt?: string
   updatedAt?: string
 }
@@ -88,6 +91,59 @@ export type CreateGovernanceRulePayload = {
   value: string
   description?: string
   active?: boolean
+}
+
+export type DispatchTargetMatchRules = {
+  titleAny?: string[]
+  titleRegex?: string | null
+  priceRange?: {
+    min?: number | null
+    max?: number | null
+  } | null
+}
+
+export type DispatchTarget = {
+  id: string
+  niche: string
+  campaignId: string | null
+  instanceId: string
+  groupJid: string
+  priority: number
+  active: boolean
+  exclusive: boolean
+  matchRules?: DispatchTargetMatchRules | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type UpsertDispatchTargetPayload = {
+  niche: string
+  campaignId: string | null
+  instanceId: string
+  groupJid: string
+  priority: number
+  active: boolean
+  exclusive: boolean
+  matchRules?: DispatchTargetMatchRules
+}
+
+export type DispatchCategory = {
+  id: string
+  name: string
+  aliases: string[]
+  maxPerWindow: number
+  windowMinutes: number
+  active: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type UpsertDispatchCategoryPayload = {
+  name: string
+  aliases: string[]
+  maxPerWindow: number
+  windowMinutes: number
+  active: boolean
 }
 
 export type DispatchDebugEntry = {
@@ -143,7 +199,6 @@ async function parseBody(response: Response) {
 
 function normalizeHeaders(options: {
   basicAuth?: { username: string; password: string }
-  governanceSecret?: string
   body?: unknown
 }) {
   return {
@@ -151,8 +206,12 @@ function normalizeHeaders(options: {
     ...(options.basicAuth?.username && options.basicAuth.password
       ? { Authorization: `Basic ${encodeBasicAuth(options.basicAuth.username, options.basicAuth.password)}` }
       : {}),
-    ...(options.governanceSecret ? { 'x-governance-secret': options.governanceSecret } : {}),
   }
+}
+
+function dispatchUrl(path: string) {
+  if (path.startsWith('/api/admin/')) return path
+  return `${dispatchApiBaseUrl()}${path}`
 }
 
 export async function dispatchRequest<T>(
@@ -161,13 +220,12 @@ export async function dispatchRequest<T>(
     method?: string
     body?: unknown
     basicAuth?: { username: string; password: string }
-    governanceSecret?: string
     onDebug?: (entry: DispatchDebugEntry) => void
   } = {},
 ) {
   const method = options.method ?? 'GET'
   const startedAt = performance.now()
-  const url = `${dispatchApiBaseUrl()}${path}`
+  const url = dispatchUrl(path)
   let status: string | number = 'network'
   let responseBody: unknown = null
 
@@ -214,7 +272,17 @@ export async function dispatchRequest<T>(
 }
 
 export function getDispatchApiErrorMessage(error: unknown) {
-  if (error instanceof DispatchApiClientError) return error.message
+  if (error instanceof DispatchApiClientError) {
+    const friendly: Record<number, string> = {
+      400: `Validacao recusada: ${error.message}`,
+      401: 'Configuracao do governance secret invalida no proxy do frontend.',
+      404: 'Item nao encontrado no dispatch-service.',
+      409: `Conflito ou registro duplicado: ${error.message}`,
+      500: 'Erro interno do dispatch-service.',
+    }
+
+    return friendly[error.statusCode] ?? error.message
+  }
   if (error instanceof Error) return error.message
   return 'Erro inesperado ao comunicar com o dispatch-service.'
 }
