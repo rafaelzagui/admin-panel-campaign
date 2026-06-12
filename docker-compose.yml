@@ -12,5 +12,6 @@ services:
     environment:
       CAMPAIGN_API_PROXY_TARGET: http://72.60.60.152:3001
       DISPATCH_API_PROXY_TARGET: http://72.60.60.152:3002
+      GOVERNANCE_API_SECRET: ${GOVERNANCE_API_SECRET:?GOVERNANCE_API_SECRET is required}
     extra_hosts:
       - "host.docker.internal:host-gateway"
