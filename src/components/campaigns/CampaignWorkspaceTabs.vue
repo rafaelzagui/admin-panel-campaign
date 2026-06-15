@@ -14,6 +14,7 @@ const tabs: Array<{ label: string; value: CampaignWorkspaceTab }> = [
   { label: 'Regras', value: 'rules' },
   { label: 'Audiencias', value: 'audiences' },
   { label: 'Templates', value: 'templates' },
+  { label: 'Grupos de envio', value: 'dispatch-targets' },
   { label: 'Execucoes', value: 'executions' },
 ]
 </script>

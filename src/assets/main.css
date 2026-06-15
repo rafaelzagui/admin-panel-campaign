@@ -1712,6 +1712,11 @@ textarea:focus {
   min-width: 1060px;
 }
 
+.campaign-target-row {
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 0.72fr) minmax(140px, 0.48fr) minmax(180px, 0.62fr);
+  min-width: 760px;
+}
+
 .dispatch-categories-row {
   grid-template-columns: minmax(140px, 0.55fr) minmax(280px, 1fr) minmax(170px, 0.62fr) minmax(90px, 0.36fr) minmax(150px, 0.5fr);
   min-width: 900px;

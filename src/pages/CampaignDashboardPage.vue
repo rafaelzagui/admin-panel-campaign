@@ -5,6 +5,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import CampaignAuditPanel from '@/components/campaigns/CampaignAuditPanel.vue'
 import CampaignContextPanel from '@/components/campaigns/CampaignContextPanel.vue'
 import CampaignDetailsForm from '@/components/campaigns/CampaignDetailsForm.vue'
+import CampaignDispatchTargetsPanel from '@/components/campaigns/CampaignDispatchTargetsPanel.vue'
 import CampaignOperationalPanel from '@/components/campaigns/CampaignOperationalPanel.vue'
 import CampaignRulesPanel from '@/components/campaigns/CampaignRulesPanel.vue'
 import CampaignWorkspaceTabs from '@/components/campaigns/CampaignWorkspaceTabs.vue'
@@ -51,7 +52,7 @@ const showCreateCampaign = ref(false)
 const toasts = ref<ToastItem[]>([])
 let toastId = 0
 
-const campaignTabs: CampaignWorkspaceTab[] = ['configuration', 'rules', 'audiences', 'templates', 'executions']
+const campaignTabs: CampaignWorkspaceTab[] = ['configuration', 'rules', 'audiences', 'templates', 'dispatch-targets', 'executions']
 const resourceViews: AdminView[] = ['rules', 'audiences', 'templates', 'executions', 'dispatch']
 const activeView = computed<AdminView>(() => {
   return resourceViews.includes(route.name as AdminView) ? (route.name as AdminView) : 'campaigns'
@@ -390,6 +391,11 @@ watch(activeCampaignTab, (tab) => {
               title="Templates"
               description="Templates ativos contam para prontidao operacional."
               :items="selectedTemplates"
+            />
+            <CampaignDispatchTargetsPanel
+              v-else-if="activeCampaignTab === 'dispatch-targets'"
+              :campaign="selectedCampaign"
+              @notify="showToast"
             />
             <CampaignAuditPanel v-else :events="selectedAuditEvents" />
           </section>
