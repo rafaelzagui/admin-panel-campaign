@@ -55,6 +55,7 @@ export type DispatchCadenceConfig = {
   spacingMaxMs: number
   limiterMax: number
   limiterDurationMs: number
+  rankEnabled?: boolean | null
   dedupWindowHours?: number | null
   priceDropOverride?: boolean | null
   minDropPercent?: number | null
@@ -64,7 +65,7 @@ export type DispatchCadenceConfig = {
 
 export type UpdateDispatchCadenceConfigPayload = Pick<
   DispatchCadenceConfig,
-  'spacingMinMs' | 'spacingMaxMs' | 'limiterMax' | 'limiterDurationMs'
+  'spacingMinMs' | 'spacingMaxMs' | 'limiterMax' | 'limiterDurationMs' | 'rankEnabled'
 >
 
 export type CreateDispatchInstancePayload = {

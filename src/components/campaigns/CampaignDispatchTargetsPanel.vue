@@ -5,6 +5,8 @@ import type { CampaignDto } from '@/dtos/campaign.dto'
 import {
   dispatchRequest,
   getDispatchApiErrorMessage,
+  type DispatchCadenceConfig,
+  type DispatchCategory,
   type DispatchGroup,
   type DispatchInstance,
   type DispatchTarget,
@@ -22,6 +24,8 @@ const emit = defineEmits<{
 const instances = ref<DispatchInstance[]>([])
 const groups = ref<DispatchGroup[]>([])
 const targets = ref<DispatchTarget[]>([])
+const categories = ref<DispatchCategory[]>([])
+const cadenceConfig = ref<DispatchCadenceConfig | null>(null)
 const selectedInstanceId = ref('')
 const selectedGroupJid = ref('')
 const priority = ref(100)
@@ -38,6 +42,18 @@ const campaignTargets = computed(() =>
 const activeTarget = computed(() => campaignTargets.value.find((target) => target.active) ?? campaignTargets.value[0] ?? null)
 
 const selectedGroup = computed(() => groups.value.find((group) => group.jid === selectedGroupJid.value) ?? null)
+
+const activeCategories = computed(() =>
+  categories.value
+    .filter((category) => category.active)
+    .sort((a, b) => a.name.localeCompare(b.name)),
+)
+
+const targetGroupLabel = computed(() => {
+  if (!activeTarget.value) return ''
+  const group = groups.value.find((item) => item.jid === activeTarget.value?.groupJid)
+  return group?.subject || activeTarget.value.groupJid
+})
 
 const selectedTarget = computed(() =>
   campaignTargets.value.find(
@@ -90,6 +106,14 @@ async function loadTargets() {
   applyTarget(activeTarget.value)
 }
 
+async function loadCategories() {
+  categories.value = await dispatchRequest<DispatchCategory[]>('/api/admin/categories')
+}
+
+async function loadCadenceConfig() {
+  cadenceConfig.value = await dispatchRequest<DispatchCadenceConfig>('/api/admin/dispatch-config/global')
+}
+
 async function loadGroups() {
   if (!selectedInstanceId.value) {
     groups.value = []
@@ -108,7 +132,7 @@ async function loadGroups() {
 
 async function refreshPanel() {
   await withBusy('refresh', async () => {
-    await Promise.all([loadInstances(), loadTargets()])
+    await Promise.all([loadInstances(), loadTargets(), loadCategories(), loadCadenceConfig()])
     if (selectedInstanceId.value) await loadGroups()
   })
 }
@@ -230,6 +254,50 @@ onMounted(refreshPanel)
           <button class="primary-button" :disabled="loading || !canSave" @click="saveTarget">
             <Save :size="14" /> Salvar grupo
           </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="workspace-panel-heading">
+        <div>
+          <h2>Cluster / Categorias</h2>
+          <p>
+            Esta campanha envia para o grupo
+            {{ activeTarget ? targetGroupLabel : 'ainda nao definido' }}.
+            As categorias abaixo controlam quantos produtos semelhantes podem sair para esse grupo em uma janela de tempo.
+          </p>
+        </div>
+        <span :class="['badge', cadenceConfig?.rankEnabled ? 'good' : 'warn']">
+          rank {{ cadenceConfig?.rankEnabled ? 'ativo' : 'inativo' }}
+        </span>
+      </div>
+
+      <div v-if="!activeTarget" class="alert warn-alert">
+        Adicione um DispatchTarget ativo para esta campanha. Sem grupo ativo, cluster e cadencia nao tem destino para atuar.
+      </div>
+      <div v-else class="alert warn-alert">
+        Se outra campanha usa o mesmo grupo, ela compartilha os mesmos limites de categoria.
+      </div>
+
+      <div class="management-table">
+        <div class="management-row dispatch-categories-row table-head">
+          <span>Categoria</span>
+          <span>Aliases</span>
+          <span>Limite</span>
+          <span>Status</span>
+        </div>
+        <div v-if="!activeCategories.length" class="empty-state dispatch-empty">
+          Nenhuma categoria global ativa carregada.
+        </div>
+        <div v-for="category in activeCategories" :key="category.id" class="management-row dispatch-categories-row">
+          <strong>{{ category.name }}</strong>
+          <span class="chip-list">
+            <small v-for="alias in category.aliases" :key="alias">{{ alias }}</small>
+            <small v-if="!category.aliases.length" class="fallback-note">sem alias</small>
+          </span>
+          <span>{{ category.maxPerWindow }} a cada {{ category.windowMinutes }}min</span>
+          <span :class="['badge', category.active ? 'good' : 'bad']">{{ category.active ? 'ativa' : 'inativa' }}</span>
         </div>
       </div>
     </section>

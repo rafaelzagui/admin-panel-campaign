@@ -36,6 +36,7 @@ const DISPATCH_CADENCE_DEFAULTS: UpdateDispatchCadenceConfigPayload = {
   spacingMaxMs: 8000,
   limiterMax: 1,
   limiterDurationMs: 10000,
+  rankEnabled: false,
 }
 
 const config = ref<DispatchConfigSummary | null>(null)
@@ -181,6 +182,7 @@ function cadencePayload(): UpdateDispatchCadenceConfigPayload {
     spacingMaxMs: Number(cadenceForm.value.spacingMaxMs),
     limiterMax: Number(cadenceForm.value.limiterMax),
     limiterDurationMs: Number(cadenceForm.value.limiterDurationMs),
+    rankEnabled: Boolean(cadenceForm.value.rankEnabled),
   }
 }
 
@@ -286,6 +288,7 @@ function fillCadenceForm(nextConfig: DispatchCadenceConfig) {
     spacingMaxMs: nextConfig.spacingMaxMs,
     limiterMax: nextConfig.limiterMax,
     limiterDurationMs: nextConfig.limiterDurationMs,
+    rankEnabled: Boolean(nextConfig.rankEnabled),
   }
 }
 
@@ -1215,6 +1218,10 @@ async function copy(value: string, message: string) {
                   <span>Atualizado</span>
                   <strong class="dispatch-metric-text">{{ dispatchCadenceConfig?.updatedAt || '-' }}</strong>
                 </div>
+                <div class="metric">
+                  <span>Rank</span>
+                  <strong>{{ cadenceForm.rankEnabled ? 'Ativo' : 'Inativo' }}</strong>
+                </div>
               </div>
 
               <div class="form-grid">
@@ -1234,6 +1241,10 @@ async function copy(value: string, message: string) {
                   limiterDurationMs
                   <input v-model.number="cadenceForm.limiterDurationMs" type="number" min="1000" step="1" />
                 </label>
+              </div>
+
+              <div class="dispatch-checks">
+                <label><input v-model="cadenceForm.rankEnabled" type="checkbox" /> Rank/categorias ativo</label>
               </div>
 
               <div v-if="cadenceSaved" class="alert warn-alert cadence-restart-alert">
