@@ -1722,6 +1722,19 @@ textarea:focus {
   min-width: 900px;
 }
 
+.campaign-clusters-row {
+  grid-template-columns: minmax(110px, 0.5fr) minmax(170px, 1fr) minmax(115px, 0.48fr) minmax(70px, 0.32fr) minmax(115px, 0.48fr) minmax(220px, 0.72fr);
+  min-width: 880px;
+}
+
+.campaign-clusters-row .dispatch-actions {
+  flex-wrap: nowrap;
+}
+
+.campaign-clusters-row .dispatch-actions .secondary-button {
+  white-space: nowrap;
+}
+
 .dispatch-badges,
 .chip-list {
   display: flex;
@@ -1741,6 +1754,15 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 999px;
   font-size: 10px;
+}
+
+.chip-list small button {
+  border: 0;
+  padding: 0 0 0 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
 }
 
 .fallback-note {

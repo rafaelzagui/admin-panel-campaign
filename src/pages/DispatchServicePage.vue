@@ -55,6 +55,8 @@ const alert = ref<{ type: 'success' | 'warning' | 'error' | 'info'; message: str
 const debugEntry = ref<DispatchDebugEntry | null>(null)
 const qrImage = ref('')
 const search = ref('')
+const groupsSearch = ref('')
+const targetGroupSearch = ref('')
 const cadenceSaved = ref(false)
 
 const credentials = ref({
@@ -163,6 +165,11 @@ function splitCsv(value: string) {
 
 function parseTags(value: string) {
   return splitCsv(value.replace(/\n/g, ','))
+}
+
+function withSearchParam(path: string, searchValue: string) {
+  const query = searchValue.trim()
+  return query ? `${path}?search=${encodeURIComponent(query)}` : path
 }
 
 function compact<T extends Record<string, unknown>>(value: T) {
@@ -533,10 +540,16 @@ async function listGroups() {
   if (!selectedId.value) return showAlert('warning', 'Selecione uma instancia primeiro.')
 
   await withBusy('groups', async () => {
-    groups.value = await dispatchRequest<DispatchGroup[]>(`/admin/whatsmiau/instances/${encodeURIComponent(selectedId.value)}/groups`, {
-      basicAuth: basicAuth(),
-      onDebug: debug,
-    })
+    groups.value = await dispatchRequest<DispatchGroup[]>(
+      withSearchParam(
+        `/admin/whatsmiau/instances/${encodeURIComponent(selectedId.value)}/groups`,
+        groupsSearch.value,
+      ),
+      {
+        basicAuth: basicAuth(),
+        onDebug: debug,
+      },
+    )
     showAlert('success', 'Grupos carregados.')
   })
 }
@@ -652,7 +665,10 @@ async function loadTargetGroups() {
 
   await withBusy('target-groups', async () => {
     targetGroups.value = await dispatchRequest<DispatchGroup[]>(
-      `/api/admin/dispatch-targets/instances/${encodeURIComponent(targetForm.value.instanceId)}/groups`,
+      withSearchParam(
+        `/api/admin/dispatch-targets/instances/${encodeURIComponent(targetForm.value.instanceId)}/groups`,
+        targetGroupSearch.value,
+      ),
       { onDebug: debug },
     )
     if (targetForm.value.groupJid && !targetGroups.value.some((group) => group.jid === targetForm.value.groupJid)) {
@@ -660,6 +676,13 @@ async function loadTargetGroups() {
     }
     showAlert('success', 'Grupos da instancia carregados.')
   })
+}
+
+async function changeTargetInstance() {
+  targetForm.value.groupJid = ''
+  targetGroupSearch.value = ''
+  targetGroups.value = []
+  await loadTargetGroups()
 }
 
 function editDispatchTarget(target: DispatchTarget) {
@@ -677,6 +700,7 @@ function editDispatchTarget(target: DispatchTarget) {
     priceMin: target.matchRules?.priceRange?.min?.toString() ?? '',
     priceMax: target.matchRules?.priceRange?.max?.toString() ?? '',
   }
+  targetGroupSearch.value = ''
   targetGroups.value = []
   void loadTargetGroups()
 }
@@ -696,6 +720,7 @@ function resetTargetForm() {
     priceMin: '',
     priceMax: '',
   }
+  targetGroupSearch.value = ''
   targetGroups.value = []
 }
 
@@ -1078,6 +1103,19 @@ async function copy(value: string, message: string) {
               <MessageSquare :size="14" /> Listar grupos
             </button>
           </div>
+          <div class="dispatch-form">
+            <div class="form-grid">
+              <label>
+                Buscar grupo
+                <input
+                  v-model="groupsSearch"
+                  :disabled="loading || !selectedId"
+                  placeholder="Pesquisar grupo por nome ou JID"
+                  @keydown.enter.prevent="listGroups"
+                />
+              </label>
+            </div>
+          </div>
           <div class="management-table">
             <div class="management-row dispatch-groups-row table-head">
               <span>Grupo</span>
@@ -1085,7 +1123,9 @@ async function copy(value: string, message: string) {
               <span>Participantes</span>
               <span>Acoes</span>
             </div>
-            <div v-if="!groups.length" class="empty-state dispatch-empty">Nenhum grupo carregado.</div>
+            <div v-if="!groups.length" class="empty-state dispatch-empty">
+              {{ selectedId ? 'Nenhum grupo encontrado.' : 'Selecione uma instancia para buscar grupos.' }}
+            </div>
             <div v-for="group in groups" :key="group.jid" class="management-row dispatch-groups-row">
               <strong>{{ group.subject || group.id }}</strong>
               <code>{{ group.jid }}</code>
@@ -1327,7 +1367,7 @@ async function copy(value: string, message: string) {
                 </label>
                 <label>
                   Instance
-                  <select v-model="targetForm.instanceId" @change="loadTargetGroups">
+                  <select v-model="targetForm.instanceId" @change="changeTargetInstance">
                     <option value="">Selecione</option>
                     <option v-for="instance in instances" :key="instance.id" :value="instance.id">
                       {{ instance.instanceName || instance.id }}
@@ -1335,11 +1375,20 @@ async function copy(value: string, message: string) {
                   </select>
                 </label>
                 <label>
+                  Buscar grupo
+                  <input
+                    v-model="targetGroupSearch"
+                    :disabled="!targetForm.instanceId || loading"
+                    placeholder="Nome do grupo ou JID"
+                    @keydown.enter.prevent="loadTargetGroups"
+                  />
+                </label>
+                <label>
                   Grupo
                   <select v-model="targetForm.groupJid" :disabled="!targetForm.instanceId">
                     <option value="">Selecione</option>
                     <option v-for="group in targetGroups" :key="group.jid" :value="group.jid">
-                      {{ group.subject || group.jid }}
+                      {{ group.subject || group.jid }} - {{ group.participantCount ?? '-' }} participantes
                     </option>
                   </select>
                 </label>
@@ -1370,9 +1419,15 @@ async function copy(value: string, message: string) {
               </div>
               <div class="action-row">
                 <button class="secondary-button" type="button" :disabled="loading" @click="resetTargetForm">Limpar</button>
+                <button class="secondary-button" type="button" :disabled="loading || !targetForm.instanceId" @click="loadTargetGroups">
+                  Buscar grupos
+                </button>
                 <button class="primary-button" :disabled="loading">
                   <Save :size="14" /> Salvar target
                 </button>
+              </div>
+              <div v-if="targetForm.instanceId && !targetGroups.length && !loading" class="empty-state dispatch-empty">
+                Nenhum grupo encontrado.
               </div>
             </form>
           </section>

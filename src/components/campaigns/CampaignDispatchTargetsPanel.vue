@@ -10,6 +10,7 @@ import {
   type DispatchGroup,
   type DispatchInstance,
   type DispatchTarget,
+  type UpsertDispatchCategoryPayload,
   type UpsertDispatchTargetPayload,
 } from '@/services/dispatch.service'
 
@@ -28,10 +29,21 @@ const categories = ref<DispatchCategory[]>([])
 const cadenceConfig = ref<DispatchCadenceConfig | null>(null)
 const selectedInstanceId = ref('')
 const selectedGroupJid = ref('')
+const groupSearch = ref('')
 const priority = ref(100)
 const active = ref(true)
 const loading = ref(false)
 const busyAction = ref('')
+const showCategoryModal = ref(false)
+const editingCategoryId = ref('')
+const aliasInput = ref('')
+const categoryForm = ref({
+  name: '',
+  aliases: [] as string[],
+  maxPerWindow: 1,
+  windowMinutes: 60,
+  active: true,
+})
 
 const campaignTargets = computed(() =>
   targets.value
@@ -45,9 +57,10 @@ const selectedGroup = computed(() => groups.value.find((group) => group.jid === 
 
 const activeCategories = computed(() =>
   categories.value
-    .filter((category) => category.active)
     .sort((a, b) => a.name.localeCompare(b.name)),
 )
+
+const categoryModalTitle = computed(() => (editingCategoryId.value ? 'Editar cluster' : 'Novo cluster'))
 
 const targetGroupLabel = computed(() => {
   if (!activeTarget.value) return ''
@@ -63,6 +76,12 @@ const selectedTarget = computed(() =>
 
 const canSave = computed(() => selectedInstanceId.value && selectedGroupJid.value && Number.isFinite(priority.value))
 
+function groupsPath(instanceId: string, search?: string) {
+  const query = search?.trim()
+  const suffix = query ? `?search=${encodeURIComponent(query)}` : ''
+  return `/api/admin/dispatch-targets/instances/${encodeURIComponent(instanceId)}/groups${suffix}`
+}
+
 function targetPayload(overrides: Partial<DispatchTarget> = {}): UpsertDispatchTargetPayload {
   return {
     niche: overrides.niche ?? props.campaign.slug ?? props.campaign.name,
@@ -74,6 +93,102 @@ function targetPayload(overrides: Partial<DispatchTarget> = {}): UpsertDispatchT
     exclusive: overrides.exclusive ?? false,
     matchRules: overrides.matchRules ?? {},
   }
+}
+
+function categoryPayload(): UpsertDispatchCategoryPayload {
+  return {
+    name: categoryForm.value.name.trim(),
+    aliases: categoryForm.value.aliases.map((alias) => alias.trim()).filter(Boolean),
+    maxPerWindow: Number(categoryForm.value.maxPerWindow),
+    windowMinutes: Number(categoryForm.value.windowMinutes),
+    active: categoryForm.value.active,
+  }
+}
+
+function validateCategoryForm() {
+  const payload = categoryPayload()
+  const errors: string[] = []
+
+  if (!payload.name) errors.push('Nome obrigatorio.')
+  if (!payload.aliases.length) errors.push('Adicione pelo menos 1 alias.')
+  if (!Number.isFinite(payload.maxPerWindow) || payload.maxPerWindow < 1) {
+    errors.push('maxPerWindow deve ser maior ou igual a 1.')
+  }
+  if (!Number.isFinite(payload.windowMinutes) || payload.windowMinutes < 1) {
+    errors.push('windowMinutes deve ser maior ou igual a 1.')
+  }
+
+  return errors
+}
+
+function resetCategoryForm() {
+  editingCategoryId.value = ''
+  aliasInput.value = ''
+  categoryForm.value = {
+    name: '',
+    aliases: [],
+    maxPerWindow: 1,
+    windowMinutes: 60,
+    active: true,
+  }
+}
+
+function openCreateCategory() {
+  resetCategoryForm()
+  showCategoryModal.value = true
+}
+
+function editCategory(category: DispatchCategory) {
+  editingCategoryId.value = category.id
+  aliasInput.value = ''
+  categoryForm.value = {
+    name: category.name,
+    aliases: [...category.aliases],
+    maxPerWindow: category.maxPerWindow,
+    windowMinutes: category.windowMinutes,
+    active: category.active,
+  }
+  showCategoryModal.value = true
+}
+
+function closeCategoryModal() {
+  showCategoryModal.value = false
+  resetCategoryForm()
+}
+
+function addAlias() {
+  const aliases = aliasInput.value
+    .split(',')
+    .map((alias) => alias.trim())
+    .filter(Boolean)
+  const uniqueAliases = aliases.filter((alias) => !categoryForm.value.aliases.includes(alias))
+
+  if (!uniqueAliases.length) {
+    aliasInput.value = ''
+    return
+  }
+
+  categoryForm.value.aliases.push(...uniqueAliases)
+  aliasInput.value = ''
+}
+
+function removeAlias(alias: string) {
+  categoryForm.value.aliases = categoryForm.value.aliases.filter((item) => item !== alias)
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '-'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 async function withBusy(action: string, task: () => Promise<void>) {
@@ -121,9 +236,7 @@ async function loadGroups() {
     return
   }
 
-  groups.value = await dispatchRequest<DispatchGroup[]>(
-    `/api/admin/dispatch-targets/instances/${encodeURIComponent(selectedInstanceId.value)}/groups`,
-  )
+  groups.value = await dispatchRequest<DispatchGroup[]>(groupsPath(selectedInstanceId.value, groupSearch.value))
 
   if (selectedGroupJid.value && !groups.value.some((group) => group.jid === selectedGroupJid.value)) {
     selectedGroupJid.value = ''
@@ -139,7 +252,12 @@ async function refreshPanel() {
 
 async function changeInstance() {
   selectedGroupJid.value = ''
+  groupSearch.value = ''
   groups.value = []
+  await withBusy('groups', loadGroups)
+}
+
+async function searchGroups() {
   await withBusy('groups', loadGroups)
 }
 
@@ -194,6 +312,86 @@ async function removeTarget(target: DispatchTarget) {
   })
 }
 
+async function saveCategory() {
+  if (aliasInput.value.trim()) addAlias()
+
+  const errors = validateCategoryForm()
+  if (errors.length) {
+    emit('notify', 'warning', 'Cluster incompleto', errors.join('\n'))
+    return
+  }
+
+  await withBusy('category-save', async () => {
+    const path = editingCategoryId.value
+      ? `/api/admin/categories/${encodeURIComponent(editingCategoryId.value)}`
+      : '/api/admin/categories'
+
+    await dispatchRequest<DispatchCategory>(path, {
+      method: editingCategoryId.value ? 'PATCH' : 'POST',
+      body: categoryPayload(),
+    })
+    await loadCategories()
+    closeCategoryModal()
+    emit('notify', 'success', 'Cluster salvo', 'As regras globais de categoria foram atualizadas.')
+  })
+}
+
+async function toggleCategory(category: DispatchCategory) {
+  await withBusy(`category:${category.id}`, async () => {
+    await dispatchRequest<DispatchCategory>(`/api/admin/categories/${encodeURIComponent(category.id)}`, {
+      method: 'PATCH',
+      body: {
+        name: category.name,
+        aliases: category.aliases,
+        maxPerWindow: category.maxPerWindow,
+        windowMinutes: category.windowMinutes,
+        active: !category.active,
+      },
+    })
+    await loadCategories()
+    emit('notify', 'success', category.active ? 'Cluster desativado' : 'Cluster ativado', category.name)
+  })
+}
+
+async function deleteCategory(category: DispatchCategory) {
+  if (!window.confirm(`Excluir o cluster ${category.name}?`)) return
+
+  await withBusy(`category-delete:${category.id}`, async () => {
+    await dispatchRequest<unknown>(`/api/admin/categories/${encodeURIComponent(category.id)}`, {
+      method: 'DELETE',
+    })
+    await loadCategories()
+    emit('notify', 'success', 'Cluster excluido', category.name)
+  })
+}
+
+async function toggleRankEnabled() {
+  if (!cadenceConfig.value?.id) {
+    emit('notify', 'warning', 'Configuracao ausente', 'Carregue a configuracao global do dispatch-service.')
+    return
+  }
+
+  const nextRankEnabled = !cadenceConfig.value.rankEnabled
+
+  await withBusy('rank-toggle', async () => {
+    cadenceConfig.value = await dispatchRequest<DispatchCadenceConfig>(
+      `/api/admin/dispatch-config/${encodeURIComponent(cadenceConfig.value!.id)}`,
+      {
+        method: 'PATCH',
+        body: { rankEnabled: nextRankEnabled },
+      },
+    )
+    emit(
+      'notify',
+      'success',
+      nextRankEnabled ? 'Filtro de clusters ativado' : 'Filtro de clusters desativado',
+      nextRankEnabled
+        ? 'O dispatch-service passara a limitar envios por cluster.'
+        : 'Os clusters continuam cadastrados, mas nao afetam os disparos.',
+    )
+  })
+}
+
 watch(
   () => props.campaign.id,
   () => {
@@ -230,11 +428,20 @@ onMounted(refreshPanel)
             </select>
           </label>
           <label>
+            Buscar grupo
+            <input
+              v-model="groupSearch"
+              :disabled="loading || !selectedInstanceId"
+              placeholder="Nome do grupo ou JID"
+              @keydown.enter.prevent="searchGroups"
+            />
+          </label>
+          <label>
             Grupo
             <select v-model="selectedGroupJid" :disabled="loading || !selectedInstanceId">
               <option value="">Selecione</option>
               <option v-for="group in groups" :key="group.jid" :value="group.jid">
-                {{ group.subject || group.jid }}
+                {{ group.subject || group.jid }} - {{ group.participantCount ?? '-' }} participantes
               </option>
             </select>
           </label>
@@ -251,9 +458,15 @@ onMounted(refreshPanel)
         <div class="action-row">
           <span class="badge info">{{ campaignTargets.length }} target(s)</span>
           <span v-if="selectedGroup" class="badge good">{{ selectedGroup.participantCount ?? '-' }} participantes</span>
+          <button class="secondary-button" type="button" :disabled="loading || !selectedInstanceId" @click="searchGroups">
+            Buscar grupos
+          </button>
           <button class="primary-button" :disabled="loading || !canSave" @click="saveTarget">
             <Save :size="14" /> Salvar grupo
           </button>
+        </div>
+        <div v-if="selectedInstanceId && !groups.length && !loading" class="empty-state dispatch-empty">
+          Nenhum grupo encontrado para esta busca.
         </div>
       </div>
     </section>
@@ -261,43 +474,67 @@ onMounted(refreshPanel)
     <section class="panel">
       <div class="workspace-panel-heading">
         <div>
-          <h2>Cluster / Categorias</h2>
+          <h2>Clusters de produtos</h2>
           <p>
-            Esta campanha envia para o grupo
-            {{ activeTarget ? targetGroupLabel : 'ainda nao definido' }}.
-            As categorias abaixo controlam quantos produtos semelhantes podem sair para esse grupo em uma janela de tempo.
+            Clusters sao regras globais de categoria. Esta campanha sera afetada por elas ao enviar para o grupo configurado em Grupos de envio.
           </p>
         </div>
-        <span :class="['badge', cadenceConfig?.rankEnabled ? 'good' : 'warn']">
-          rank {{ cadenceConfig?.rankEnabled ? 'ativo' : 'inativo' }}
-        </span>
+        <div class="resource-actions">
+          <span :class="['badge', cadenceConfig?.rankEnabled ? 'good' : 'warn']">
+            filtro {{ cadenceConfig?.rankEnabled ? 'ativo' : 'inativo' }}
+          </span>
+          <button
+            :class="['secondary-button', { 'danger-action': cadenceConfig?.rankEnabled }]"
+            :disabled="loading || !cadenceConfig?.id"
+            @click="toggleRankEnabled"
+          >
+            {{ cadenceConfig?.rankEnabled ? 'Desativar filtro' : 'Ativar filtro' }}
+          </button>
+          <button class="primary-button" :disabled="loading" @click="openCreateCategory">Novo cluster</button>
+        </div>
+      </div>
+
+      <div v-if="!cadenceConfig?.rankEnabled" class="alert warn-alert">
+        O filtro de clusters esta desativado. Os clusters podem ser cadastrados, mas nao afetam os disparos ate que o filtro seja ativado.
       </div>
 
       <div v-if="!activeTarget" class="alert warn-alert">
-        Adicione um DispatchTarget ativo para esta campanha. Sem grupo ativo, cluster e cadencia nao tem destino para atuar.
+        Configure um grupo de envio para esta campanha antes de validar o efeito dos clusters.
       </div>
       <div v-else class="alert warn-alert">
-        Se outra campanha usa o mesmo grupo, ela compartilha os mesmos limites de categoria.
+        Esta campanha envia para o grupo {{ targetGroupLabel }}. Se outra campanha usa o mesmo grupo, ela compartilha os mesmos limites de cluster.
       </div>
 
       <div class="management-table">
-        <div class="management-row dispatch-categories-row table-head">
+        <div class="management-row campaign-clusters-row table-head">
           <span>Categoria</span>
           <span>Aliases</span>
           <span>Limite</span>
           <span>Status</span>
+          <span>Atualizado</span>
+          <span>Acoes</span>
         </div>
         <div v-if="!activeCategories.length" class="empty-state dispatch-empty">
-          Nenhuma categoria global ativa carregada.
+          Nenhum cluster cadastrado.
         </div>
-        <div v-for="category in activeCategories" :key="category.id" class="management-row dispatch-categories-row">
+        <div v-for="category in activeCategories" :key="category.id" class="management-row campaign-clusters-row">
           <strong>{{ category.name }}</strong>
           <span class="chip-list">
             <small v-for="alias in category.aliases" :key="alias">{{ alias }}</small>
             <small v-if="!category.aliases.length" class="fallback-note">sem alias</small>
           </span>
           <span>{{ category.maxPerWindow }} a cada {{ category.windowMinutes }}min</span>
-          <span :class="['badge', category.active ? 'good' : 'bad']">{{ category.active ? 'ativa' : 'inativa' }}</span>
+          <span :class="['badge', category.active ? 'good' : 'bad']">{{ category.active ? 'ativo' : 'inativo' }}</span>
+          <span>{{ formatDateTime(category.updatedAt) }}</span>
+          <span class="dispatch-actions">
+            <button class="secondary-button" :disabled="loading" @click="editCategory(category)">Editar</button>
+            <button class="secondary-button" :disabled="loading" @click="toggleCategory(category)">
+              {{ category.active ? 'Desativar' : 'Ativar' }}
+            </button>
+            <button class="secondary-button danger-action" :disabled="loading" @click="deleteCategory(category)">
+              <Trash2 :size="13" /> Excluir
+            </button>
+          </span>
         </div>
       </div>
     </section>
@@ -339,5 +576,62 @@ onMounted(refreshPanel)
         </div>
       </div>
     </section>
+
+    <div v-if="showCategoryModal" class="modal-backdrop" @click.self="closeCategoryModal">
+      <section class="modal create-campaign-modal">
+        <div class="workspace-panel-heading">
+          <div>
+            <h2>{{ categoryModalTitle }}</h2>
+            <p>Clusters controlam quantos produtos semelhantes podem sair por grupo em uma janela.</p>
+          </div>
+          <button class="icon-button" aria-label="Fechar modal" @click="closeCategoryModal">x</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Nome
+            <input v-model="categoryForm.name" placeholder="tenis" />
+          </label>
+          <label>
+            maxPerWindow
+            <input v-model.number="categoryForm.maxPerWindow" min="1" step="1" type="number" />
+          </label>
+          <label>
+            windowMinutes
+            <input v-model.number="categoryForm.windowMinutes" min="1" step="1" type="number" />
+          </label>
+        </div>
+
+        <label class="wide-field">
+          Aliases
+          <div class="action-row">
+            <input
+              v-model="aliasInput"
+              placeholder="tenis, tênis, sneaker, corrida"
+              @keydown.enter.prevent="addAlias"
+            />
+            <button class="secondary-button" type="button" @click="addAlias">Adicionar</button>
+          </div>
+        </label>
+
+        <div class="chip-list">
+          <small v-for="alias in categoryForm.aliases" :key="alias">
+            {{ alias }}
+            <button type="button" @click="removeAlias(alias)">x</button>
+          </small>
+        </div>
+
+        <div class="dispatch-checks">
+          <label><input v-model="categoryForm.active" type="checkbox" /> Ativo</label>
+        </div>
+
+        <div class="action-row">
+          <button class="secondary-button" type="button" @click="closeCategoryModal">Cancelar</button>
+          <button class="primary-button" :disabled="loading" type="button" @click="saveCategory">
+            <Save :size="14" /> Salvar cluster
+          </button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>

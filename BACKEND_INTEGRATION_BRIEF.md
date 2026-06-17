@@ -589,6 +589,7 @@ Endpoints usados:
 - `DELETE /api/admin/dispatch-targets/:targetId`
 - `GET /api/admin/dispatch-targets/instances`
 - `GET /api/admin/dispatch-targets/instances/:instanceId/groups`
+- `GET /api/admin/dispatch-targets/instances/:instanceId/groups?search=termo`
 
 No backend/proxy isso representa `/api/governance/dispatch-targets`.
 
